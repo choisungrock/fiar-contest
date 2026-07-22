@@ -33,7 +33,10 @@ module.exports = {
           red: '#c0392b',
           'red-bg': '#fbebeb',
         },
-        textBlue: '#9db0d4'
+        textBlue: '#9db0d4',
+        textSub: '#3a475c',
+        brandGreen: '#5a7a3f',
+        brandBlue: '#2f5488'
       },
       fontFamily: {
         sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],

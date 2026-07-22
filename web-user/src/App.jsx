@@ -83,7 +83,7 @@ function App() {
               
               {/* 성명 입력 */}
               <div className="mt-[32px]">
-                <label className="block text-[14px] font-bold text-[#3a475c]">
+                <label className="block text-[14px] font-bold text-textSub">
                   평가자 (심사위원 성명)
                 </label>
                 <input
@@ -98,12 +98,12 @@ function App() {
 
               {/* 부문 선택 */}
               <div className="mt-[30px]">
-                <div className="text-[14px] font-bold text-[#3a475c]">
+                <div className="text-[14px] font-bold text-textSub">
                   담당 부문 선택
                 </div>
 
                 {/* 쌀가공식품 */}
-                <div className="text-[12px] font-bold text-[#5a7a3f] mt-[14px] mb-[8px] tracking-[1px]">
+                <div className="text-[12px] font-extrabold text-brandGreen mt-[14px] mb-[8px] tracking-[1px]">
                   쌀가공식품 · 오픈테스트
                 </div>
                 <div className="grid grid-cols-3 gap-[10px] mt-[8px]">
@@ -125,7 +125,7 @@ function App() {
                 </div>
 
                 {/* 우리술 */}
-                <div className="text-[12px] font-bold text-[#2f5488] mt-[18px] mb-[8px] tracking-[1px]">
+                <div className="text-[12px] font-extrabold text-brandBlue mt-[18px] mb-[8px] tracking-[1px]">
                   우리술 · 블라인드
                 </div>
                 <div className="grid grid-cols-4 gap-[10px] mt-[8px]">
