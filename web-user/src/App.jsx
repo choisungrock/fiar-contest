@@ -112,7 +112,7 @@ function App() {
                       key={item.code}
                       type="button"
                       onClick={() => setSelectedBuman(item.code)}
-                      className={`py-[14px] px-[8px] rounded-[12px] text-center border-2 transition-all cursor-pointer ${
+                      className={`h-[84px] w-full px-[8px] rounded-[12px] flex flex-col items-center justify-center text-center border-2 transition-all cursor-pointer ${
                         selectedBuman === item.code
                           ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
                           : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
@@ -134,7 +134,7 @@ function App() {
                       key={item.code}
                       type="button"
                       onClick={() => setSelectedBuman(item.code)}
-                      className={`py-[14px] px-[8px] rounded-[12px] text-center border-2 transition-all cursor-pointer ${
+                      className={`h-[84px] w-full px-[8px] rounded-[12px] flex flex-col items-center justify-center text-center border-2 transition-all cursor-pointer ${
                         selectedBuman === item.code
                           ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
                           : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
