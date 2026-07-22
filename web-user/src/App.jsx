@@ -51,7 +51,7 @@ function App() {
       <div className="flex-1 flex overflow-hidden">
         
         {/* 좌측 배너 영역 */}
-        <div className="w-[40%] min-w-[380px] bg-gradient-to-b from-[#1b2a4a] to-[#243a63] text-white py-[64px] px-[56px] flex flex-col justify-between">
+        <div className="w-[40%] min-w-[380px] shrink-0 bg-gradient-to-b from-[#1b2a4a] to-[#243a63] text-white py-[64px] px-[56px] flex flex-col justify-between">
           <div>
             <div className="text-[14px] tracking-[3px] text-[#d9b866] font-bold">
               EXPERT EVALUATION
@@ -70,7 +70,7 @@ function App() {
         </div>
 
         {/* 우측 로그인 폼 영역 (bg-white 제거하여 부모 배경색 eef1f6 투과) */}
-        <div className="flex-1 p-[48px] flex items-center justify-center overflow-auto">
+        <div className="flex-1 min-w-0 p-[48px] flex items-center justify-center overflow-auto">
           <div className="w-full max-w-[640px]">
             <h2 className="text-[24px] font-extrabold text-[#1b2a4a]">
               평가 시작
@@ -112,10 +112,10 @@ function App() {
                       key={item.code}
                       type="button"
                       onClick={() => setSelectedBuman(item.code)}
-                      className={`py-[14px] px-2 rounded-[12px] text-center border-2 transition-all cursor-pointer ${
+                      className={`py-[16px] px-[8px] rounded-[12px] text-center border-2 transition-all cursor-pointer ${
                         selectedBuman === item.code
-                          ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-lg'
-                          : 'border-[#e2e7ef] bg-white text-[#3a475c] hover:border-gray-300'
+                          ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
+                          : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
                       }`}
                     >
                       <div className="text-[22px] font-extrabold">{item.code}</div>
@@ -134,10 +134,10 @@ function App() {
                       key={item.code}
                       type="button"
                       onClick={() => setSelectedBuman(item.code)}
-                      className={`py-[14px] px-2 rounded-[12px] text-center border-2 transition-all cursor-pointer ${
+                      className={`py-[16px] px-[8px] rounded-[12px] text-center border-2 transition-all cursor-pointer ${
                         selectedBuman === item.code
-                          ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-lg'
-                          : 'border-[#e2e7ef] bg-white text-[#3a475c] hover:border-gray-300'
+                          ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
+                          : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
                       }`}
                     >
                       <div className="text-[22px] font-extrabold">{item.title}</div>
@@ -151,10 +151,10 @@ function App() {
               <button
                 type="submit"
                 disabled={!isFormValid}
-                className={`w-full h-[58px] rounded-[12px] text-[18px] font-bold mt-[40px] transition-all cursor-pointer flex items-center justify-center ${
+                className={`w-full h-[56px] rounded-[12px] text-[18px] mt-[40px] transition-all flex items-center justify-center ${
                   isFormValid
-                    ? 'bg-[#1b2a4a] hover:bg-[#243a63] text-white shadow-lg hover:shadow-xl'
-                    : 'bg-[#c3ccdb] text-white cursor-not-allowed'
+                    ? 'bg-[#1b2a4a] hover:bg-[#243a63] text-white font-extrabold shadow-lg hover:shadow-xl cursor-pointer'
+                    : 'bg-[#c3ccdb] text-white font-bold cursor-default'
                 }`}
               >
                 평가 시작하기 →
