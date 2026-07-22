@@ -5,159 +5,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>K-라이스페스타 품평회 관리 시스템 - 로그인</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: linear-gradient(135deg, #1b2a4a 0%, #20325a 100%);
-      color: #fff;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .login-container {
-      width: 100%;
-      max-width: 480px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 24px;
-      padding: 48px 40px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      text-align: center;
-    }
-
-    .brand-section {
-      margin-bottom: 36px;
-    }
-
-    .brand-sub {
-      font-size: 13px;
-      font-weight: 700;
-      color: #d9b866;
-      letter-spacing: 3px;
-      text-transform: uppercase;
-    }
-
-    .brand-title {
-      font-size: 26px;
-      font-weight: 800;
-      margin-top: 10px;
-      color: #fff;
-      line-height: 1.35;
-    }
-
-    .brand-desc {
-      font-size: 14px;
-      color: #9db0d4;
-      margin-top: 8px;
-    }
-
-    .input-group {
-      margin-bottom: 20px;
-      text-align: left;
-    }
-
-    .input-label {
-      display: block;
-      font-size: 13px;
-      font-weight: 700;
-      color: #9db0d4;
-      margin-bottom: 8px;
-    }
-
-    .input-control {
-      width: 100%;
-      height: 52px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 12px;
-      padding: 0 16px;
-      font-size: 16px;
-      color: #fff;
-      font-weight: 500;
-      transition: all 0.2s ease;
-    }
-
-    .input-control::placeholder {
-      color: #6a7c9d;
-    }
-
-    .input-control:focus {
-      outline: none;
-      background: rgba(255, 255, 255, 0.08);
-      border-color: #d9b866;
-      box-shadow: 0 0 12px rgba(217, 184, 102, 0.25);
-    }
-
-    .btn-login {
-      width: 100%;
-      height: 54px;
-      background: #e03b3b;
-      color: #fff;
-      border: none;
-      border-radius: 12px;
-      font-size: 16px;
-      font-weight: 800;
-      cursor: pointer;
-      margin-top: 12px;
-      box-shadow: 0 4px 15px rgba(224, 59, 59, 0.3);
-      transition: all 0.2s ease;
-    }
-
-    .btn-login:hover {
-      background: #c0392b;
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(224, 59, 59, 0.4);
-    }
-
-    .options-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 18px;
-      font-size: 13px;
-      color: #9db0d4;
-    }
-
-    .remember-me {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-    }
-
-    .remember-me input {
-      accent-color: #d9b866;
-    }
-
-    .find-pw {
-      color: #d9b866;
-      text-decoration: none;
-      font-weight: 600;
-    }
-
-    .find-pw:hover {
-      color: #f0d590;
-      text-decoration: underline;
-    }
-
-    .footer-notice {
-      margin-top: 48px;
-      font-size: 11px;
-      color: #5d7195;
-      line-height: 1.6;
-    }
-  </style>
+  
+  <!-- 공통 기본 리셋 및 테마 CSS 로드 -->
+  <link rel="stylesheet" href="css/common.css">
+  <!-- 로그인 페이지 전용 CSS 로드 -->
+  <link rel="stylesheet" href="css/login.css">
 </head>
 <body>
 
@@ -195,25 +47,7 @@
     </div>
   </div>
 
-  <script>
-    document.getElementById("loginForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      
-      try {
-        // 백엔드 API (api.aaa.com 목적 포트 18000) 호출 검증 테스트
-        const response = await fetch("http://localhost:18000/api/admin/groups");
-        const data = await response.json();
-        
-        console.log("백엔드 응답 데이터:", data);
-        alert(`로그인 시뮬레이션 성공!\n백엔드 통신 결과: ${data.message}`);
-      } catch (err) {
-        console.error("API 호출 실패:", err);
-        alert("백엔드 API 서버와 통신할 수 없습니다. 콘솔 로그를 확인하세요.");
-      }
-    });
-  </script>
+  <!-- 로그인 처리 로직 스크립트 로드 -->
+  <script src="js/login.js"></script>
 </body>
 </html>

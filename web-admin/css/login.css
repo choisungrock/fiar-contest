@@ -1,0 +1,145 @@
+/* 관리자 로그인 페이지의 레이아웃 및 폼 요소 전용 스타일시트 */
+
+body {
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-sidebar-bg) 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.login-container {
+  width: 100%;
+  max-width: 480px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  padding: 48px 40px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  text-align: center;
+}
+
+.brand-section {
+  margin-bottom: 36px;
+}
+
+.brand-sub {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-accent-gold-bright);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.brand-title {
+  font-size: 26px;
+  font-weight: 800;
+  margin-top: 10px;
+  color: #fff;
+  line-height: 1.35;
+}
+
+.brand-desc {
+  font-size: 14px;
+  color: var(--color-text-blue);
+  margin-top: 8px;
+}
+
+.input-group {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.input-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-blue);
+  margin-bottom: 8px;
+}
+
+.input-control {
+  width: 100%;
+  height: 52px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 0 16px;
+  font-size: 16px;
+  color: #fff;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.input-control::placeholder {
+  color: #6a7c9d;
+}
+
+.input-control:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-accent-gold-bright);
+  box-shadow: 0 0 12px rgba(217, 184, 102, 0.25);
+}
+
+.btn-login {
+  width: 100%;
+  height: 54px;
+  background: var(--color-accent-red);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  margin-top: 12px;
+  box-shadow: 0 4px 15px rgba(224, 59, 59, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-login:hover {
+  background: var(--color-accent-red-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(224, 59, 59, 0.4);
+}
+
+.options-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  font-size: 13px;
+  color: var(--color-text-blue);
+}
+
+.remember-me {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.remember-me input {
+  accent-color: var(--color-accent-gold-bright);
+}
+
+.find-pw {
+  color: var(--color-accent-gold-bright);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.find-pw:hover {
+  color: #f0d590;
+  text-decoration: underline;
+}
+
+.footer-notice {
+  margin-top: 48px;
+  font-size: 11px;
+  color: #5d7195;
+  line-height: 1.6;
+}
