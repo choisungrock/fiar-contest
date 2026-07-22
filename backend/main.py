@@ -4,7 +4,15 @@ from fastapi import FastAPI, HTTPException
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+# 분리된 API 라우터 임포트
+from api.admin.router import router as admin_router
+from api.user.router import router as user_router
+
 app = FastAPI(title="K-Rice Festa Evaluation System API")
+
+# 라우터 등록 및 경로 접두사(Prefix) 분리
+app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
+app.include_router(user_router, prefix="/api/user", tags=["User"])
 
 # 환경변수로부터 데이터베이스 URL 정보 획득
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://fair_user:fair_password@db:3306/fair_db")
