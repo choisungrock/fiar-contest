@@ -6,12 +6,12 @@ services:
     container_name: fair-mysql-db
     restart: always
     environment:
-      MYSQL_DATABASE: fair_db
-      MYSQL_USER: fair_user
-      MYSQL_PASSWORD: fair_password
-      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     ports:
-      - "13306:3306"
+      - "${MYSQL_HOST_PORT}:${MYSQL_PORT}"
     volumes:
       - db_data:/var/lib/mysql
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -25,11 +25,11 @@ services:
     container_name: fair-fastapi-backend
     restart: always
     ports:
-      - "18000:8000"
+      - "${BACKEND_HOST_PORT}:${BACKEND_PORT}"
     volumes:
       - ./backend:/app
     environment:
-      - DATABASE_URL=mysql+pymysql://fair_user:fair_password@db:3306/fair_db
+      - DATABASE_URL=${DATABASE_URL}
       - ENV=development
     depends_on:
       - db
