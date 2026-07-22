@@ -103,7 +103,7 @@ function App() {
                 </div>
 
                 {/* 쌀가공식품 */}
-                <div className="text-[12px] font-extrabold text-brandGreen mt-[14px] mb-[8px] tracking-[1px]">
+                <div className="text-[12px] font-extrabold text-brandGreen mt-[14px] tracking-[1px]">
                   쌀가공식품 · 오픈테스트
                 </div>
                 <div className="grid grid-cols-3 gap-[10px] mt-[8px]">
@@ -125,7 +125,7 @@ function App() {
                 </div>
 
                 {/* 우리술 */}
-                <div className="text-[12px] font-extrabold text-brandBlue mt-[18px] mb-[8px] tracking-[1px]">
+                <div className="text-[12px] font-extrabold text-brandBlue mt-[18px] tracking-[1px]">
                   우리술 · 블라인드
                 </div>
                 <div className="grid grid-cols-4 gap-[10px] mt-[8px]">
