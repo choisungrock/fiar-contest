@@ -72,10 +72,10 @@ function App() {
         {/* 우측 로그인 폼 영역 (bg-white 제거하여 부모 배경색 eef1f6 투과) */}
         <div className="flex-1 min-w-0 p-[48px] flex items-center justify-center overflow-auto">
           <div className="w-full max-w-[640px]">
-            <h2 className="text-[24px] font-extrabold text-[#1b2a4a]">
+            <h2 className="text-[24px] font-extrabold text-[#1b2a4a] leading-none">
               평가 시작
             </h2>
-            <p className="text-[15px] text-textInfo mt-[8px]">
+            <p className="text-[15px] text-textInfo mt-[8px] leading-[1.2]">
               평가자명을 입력하고 담당 부문을 선택하세요.
             </p>
 
@@ -83,7 +83,7 @@ function App() {
               
               {/* 성명 입력 */}
               <div className="mt-[32px]">
-                <label className="block text-[14px] font-bold text-textSub">
+                <label className="block text-[14px] font-bold text-textSub leading-none">
                   평가자 (심사위원 성명)
                 </label>
                 <input
@@ -98,12 +98,12 @@ function App() {
 
               {/* 부문 선택 */}
               <div className="mt-[30px]">
-                <div className="text-[14px] font-bold text-textSub">
+                <div className="text-[14px] font-bold text-textSub leading-none">
                   담당 부문 선택
                 </div>
 
                 {/* 쌀가공식품 */}
-                <div className="text-[12px] font-extrabold text-brandGreen mt-[14px] tracking-[1px]">
+                <div className="text-[12px] font-extrabold text-brandGreen mt-[14px] tracking-[1px] leading-none">
                   쌀가공식품 · 오픈테스트
                 </div>
                 <div className="grid grid-cols-3 gap-[10px] mt-[8px]">
@@ -125,7 +125,7 @@ function App() {
                 </div>
 
                 {/* 우리술 */}
-                <div className="text-[12px] font-extrabold text-brandBlue mt-[18px] tracking-[1px]">
+                <div className="text-[12px] font-extrabold text-brandBlue mt-[18px] tracking-[1px] leading-none">
                   우리술 · 블라인드
                 </div>
                 <div className="grid grid-cols-4 gap-[10px] mt-[8px]">
