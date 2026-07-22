@@ -1,0 +1,6 @@
+# FastAPI 및 데이터베이스 연결에 필요한 파이썬 종속성 패키지 정의 파일
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+sqlalchemy>=2.0.0
+pymysql>=1.1.0
+cryptography>=41.0.0

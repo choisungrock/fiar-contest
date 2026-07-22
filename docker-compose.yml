@@ -1,0 +1,44 @@
+# K-라이스페스타 품평회 시스템의 도커 컨테이너를 관리하는 설정 파일
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: fair-mysql-db
+    restart: always
+    environment:
+      MYSQL_DATABASE: fair_db
+      MYSQL_USER: fair_user
+      MYSQL_PASSWORD: fair_password
+      MYSQL_ROOT_PASSWORD: root_password
+    ports:
+      - "13306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - fair-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fair-fastapi-backend
+    restart: always
+    ports:
+      - "18000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=mysql+pymysql://fair_user:fair_password@db:3306/fair_db
+      - ENV=development
+    depends_on:
+      - db
+    networks:
+      - fair-network
+
+volumes:
+  db_data:
+
+networks:
+  fair-network:
+    driver: bridge
