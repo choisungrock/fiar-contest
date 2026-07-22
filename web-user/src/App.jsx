@@ -75,7 +75,7 @@ function App() {
             <h2 className="text-[24px] font-extrabold text-[#1b2a4a]">
               평가 시작
             </h2>
-            <p className="text-[15px] text-[#6b7890] mt-[8px] font-semibold">
+            <p className="text-[15px] text-textInfo mt-[8px]">
               평가자명을 입력하고 담당 부문을 선택하세요.
             </p>
 
@@ -112,14 +112,14 @@ function App() {
                       key={item.code}
                       type="button"
                       onClick={() => setSelectedBuman(item.code)}
-                      className={`py-[16px] px-[8px] rounded-[12px] text-center border-2 transition-all cursor-pointer ${
+                      className={`py-[14px] px-[8px] rounded-[12px] text-center border-2 transition-all cursor-pointer ${
                         selectedBuman === item.code
                           ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
                           : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
                       }`}
                     >
-                      <div className="text-[22px] font-extrabold">{item.code}</div>
-                      <div className="text-[14px] font-semibold mt-[4px]">{item.name}</div>
+                      <div className="text-[22px] font-extrabold leading-none">{item.code}</div>
+                      <div className="text-[14px] font-semibold mt-[4px] leading-none">{item.name}</div>
                     </button>
                   ))}
                 </div>
@@ -134,14 +134,14 @@ function App() {
                       key={item.code}
                       type="button"
                       onClick={() => setSelectedBuman(item.code)}
-                      className={`py-[16px] px-[8px] rounded-[12px] text-center border-2 transition-all cursor-pointer ${
+                      className={`py-[14px] px-[8px] rounded-[12px] text-center border-2 transition-all cursor-pointer ${
                         selectedBuman === item.code
                           ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
                           : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
                       }`}
                     >
-                      <div className="text-[22px] font-extrabold">{item.title}</div>
-                      <div className="text-[13px] font-semibold mt-[4px] truncate">{item.name}</div>
+                      <div className="text-[22px] font-extrabold leading-none">{item.title}</div>
+                      <div className="text-[13px] font-semibold mt-[4px] leading-none truncate">{item.name}</div>
                     </button>
                   ))}
                 </div>
