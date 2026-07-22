@@ -799,6 +799,28 @@
 &lt;td class="matrix-td score-total"&gt;315&lt;/td&gt; &lt;!-- 심사위원 원합계 --&gt;
 &lt;td class="matrix-td score-final"&gt;105&lt;/td&gt; &lt;!-- 최고/최저 제외한 평균 혹은 최종 합계 --&gt;</pre>
 
+  <!-- 8. Login Screen Components -->
+  <h2>8. Login Screen Components</h2>
+  <div class="section-desc">관리자 로그인 화면을 위해 새롭게 적용된 글래스모피즘 폼 및 대형 버튼 스타일입니다.</div>
+
+  <div class="component-box" style="background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-secondary-dark) 100%); justify-content: center; padding: 40px;">
+    <div style="width: 100%; max-width: 360px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 24px; text-align: center; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);">
+      <div style="font-size: 11px; font-weight: 700; color: var(--color-accent-gold-bright); letter-spacing: 2px;">Admin Console</div>
+      <div style="font-size: 18px; font-weight: 800; color: #fff; margin-top: 6px;">로그인 컴포넌트</div>
+      <div style="margin-top: 16px; text-align: left;">
+        <label style="font-size: 11px; color: var(--color-text-blue); display: block; margin-bottom: 6px;">이메일 주소</label>
+        <input type="text" style="width: 100%; height: 42px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 0 10px; color: #fff; font-size: 14px;" value="admin@ricefesta.kr">
+      </div>
+      <button style="width: 100%; height: 44px; background: var(--color-accent-red); color: #fff; border: none; border-radius: 8px; font-weight: 800; font-size: 14px; margin-top: 14px; cursor: pointer;">로그인</button>
+    </div>
+  </div>
+  <pre>
+&lt;!-- 글래스모피즘 로그인 카드 및 전용 입력/버튼 컨트롤 --&gt;
+&lt;div class="login-card" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(16px);"&gt;
+  &lt;input class="input-control" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15);" type="email" placeholder="이메일"&gt;
+  &lt;button class="btn-login" style="background: #e03b3b; font-weight: 800;"&gt;로그인&lt;/button&gt;
+&lt;/div&gt;</pre>
+
 </div>
 
 </body>
