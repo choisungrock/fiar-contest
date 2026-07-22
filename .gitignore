@@ -34,7 +34,8 @@ nosetests.xml
 coverage.xml
 htmlcov/
 .pytest_cache/
-디자인/
 
+디자인/
+*.md
 
 

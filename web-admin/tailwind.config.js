@@ -32,7 +32,8 @@ module.exports = {
           'green-bg': '#f1f7f1',
           red: '#c0392b',
           'red-bg': '#fbebeb',
-        }
+        },
+        textBlue: '#9db0d4'
       },
       fontFamily: {
         sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],

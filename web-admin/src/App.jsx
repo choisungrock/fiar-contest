@@ -38,7 +38,7 @@ function App() {
           <h1 className="text-2xl md:text-3xl font-extrabold text-white mt-2.5 leading-normal">
             전문가 품평회<br />관리 시스템
           </h1>
-          <p className="text-sm text-text-blue mt-2 font-medium">
+          <p className="text-sm text-textBlue mt-2 font-medium">
             2026 우리쌀·우리술 K-라이스페스타
           </p>
         </div>
@@ -46,7 +46,7 @@ function App() {
         {/* 로그인 폼 */}
         <form onSubmit={handleSubmit} className="text-left">
           <div className="mb-5">
-            <label className="block text-xs font-bold text-text-blue mb-2">
+            <label className="block text-xs font-bold text-textBlue mb-2">
               관리자 이메일 주소
             </label>
             <input
@@ -61,7 +61,7 @@ function App() {
           </div>
 
           <div className="mb-5">
-            <label className="block text-xs font-bold text-text-blue mb-2">
+            <label className="block text-xs font-bold text-textBlue mb-2">
               비밀번호
             </label>
             <input
@@ -83,7 +83,7 @@ function App() {
           </button>
 
           {/* 추가 행 */}
-          <div className="flex items-center justify-between mt-[18px] text-xs font-semibold text-text-blue">
+          <div className="flex items-center justify-between mt-[18px] text-xs font-semibold text-textBlue">
             <label className="flex items-center gap-1.5 cursor-pointer">
               <input
                 type="checkbox"
