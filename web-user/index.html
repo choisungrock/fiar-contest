@@ -1,89 +1,13 @@
-<!-- 평가자 로그인 페이지 및 메인 렌더링 프론트엔드 진입점 파일 -->
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>K-라이스페스타 품평회 평가 시스템 - 로그인</title>
-  
-  <!-- 공통 기본 리셋 및 테마 CSS 로드 -->
-  <link rel="stylesheet" href="css/common.css">
-  <!-- 로그인 페이지 전용 CSS 로드 -->
-  <link rel="stylesheet" href="css/login.css">
-</head>
-<body>
-
-  <!-- 좌측 파트 -->
-  <div class="banner-side">
-    <div>
-      <div class="banner-sub">EXPERT EVALUATION</div>
-      <h1 class="banner-title">전문가 품평회<br>평가 시스템</h1>
-      <div class="banner-desc">2026 우리쌀·우리술<br>K-라이스페스타 품평회</div>
-    </div>
-    <div class="banner-foot">
-      태블릿 전용 · 블라인드/오픈 테스트<br>
-      5단계 척도법 · 120점 만점
-    </div>
-  </div>
-
-  <!-- 우측 파트 -->
-  <div class="form-side">
-    <div class="form-container">
-      <h2 class="form-title">평가 시작</h2>
-      <div class="form-desc">평가자명을 입력하고 담당 부문을 선택하세요.</div>
-
-      <form id="evaluationForm">
-        <div class="input-group">
-          <label class="input-label">평가자 (심사위원 성명)</label>
-          <input type="text" id="judgeName" class="input-control" placeholder="예) 홍길동 심사위원" required>
-        </div>
-
-        <div class="buman-section">
-          <label class="input-label">담당 부문 선택</label>
-
-          <div class="buman-label rice">쌀가공식품 · 오픈테스트</div>
-          <div class="buman-grid">
-            <button type="button" class="btn-buman" data-buman="A">
-              <div class="btn-buman-title">A</div>
-              <div class="btn-buman-sub">조리</div>
-            </button>
-            <button type="button" class="btn-buman" data-buman="B">
-              <div class="btn-buman-title">B</div>
-              <div class="btn-buman-sub">비조리</div>
-            </button>
-            <button type="button" class="btn-buman" data-buman="C">
-              <div class="btn-buman-title">C</div>
-              <div class="btn-buman-sub">농협</div>
-            </button>
-          </div>
-
-          <div class="buman-label sul">우리술 · 블라인드</div>
-          <div class="buman-grid">
-            <button type="button" class="btn-buman" data-buman="ga">
-              <div class="btn-buman-title">가</div>
-              <div class="btn-buman-sub">저도발효주</div>
-            </button>
-            <button type="button" class="btn-buman" data-buman="na">
-              <div class="btn-buman-title">나</div>
-              <div class="btn-buman-sub">고도발효주</div>
-            </button>
-            <button type="button" class="btn-buman" data-buman="da">
-              <div class="btn-buman-title">다</div>
-              <div class="btn-buman-sub">약·청주</div>
-            </button>
-            <button type="button" class="btn-buman" data-buman="ra">
-              <div class="btn-buman-title">라</div>
-              <div class="btn-buman-sub">증류주</div>
-            </button>
-          </div>
-        </div>
-
-        <button type="submit" id="submitBtn" class="btn-submit" disabled>평가 시작하기 →</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- 평가자 로그인 처리 로직 스크립트 로드 -->
-  <script src="js/login.js"></script>
-</body>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>web-user</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>

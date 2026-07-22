@@ -1,53 +1,13 @@
-<!-- 관리자 로그인 페이지 및 메인 렌더링 프론트엔드 진입점 파일 -->
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>K-라이스페스타 품평회 관리 시스템 - 로그인</title>
-  
-  <!-- 공통 기본 리셋 및 테마 CSS 로드 -->
-  <link rel="stylesheet" href="css/common.css">
-  <!-- 로그인 페이지 전용 CSS 로드 -->
-  <link rel="stylesheet" href="css/login.css">
-</head>
-<body>
-
-  <div class="login-container">
-    <div class="brand-section">
-      <div class="brand-sub">Admin Console</div>
-      <h1 class="brand-title">전문가 품평회<br>관리 시스템</h1>
-      <div class="brand-desc">2026 우리쌀·우리술 K-라이스페스타 (관리자 서버)</div>
-    </div>
-
-    <form id="loginForm">
-      <div class="input-group">
-        <label class="input-label">관리자 이메일 주소</label>
-        <input type="email" id="email" class="input-control" placeholder="admin@ricefesta.kr" required autocomplete="username">
-      </div>
-
-      <div class="input-group">
-        <label class="input-label">비밀번호</label>
-        <input type="password" id="password" class="input-control" placeholder="••••••••" required autocomplete="current-password">
-      </div>
-
-      <button type="submit" class="btn-login">로그인</button>
-
-      <div class="options-row">
-        <label class="remember-me">
-          <input type="checkbox"> 로그인 상태 유지
-        </label>
-        <a href="#" class="find-pw" onclick="alert('품평회 운영국에 문의해 주시기 바랍니다.');">비밀번호 찾기</a>
-      </div>
-    </form>
-
-    <div class="footer-notice">
-      본 시스템은 승인된 품평회 관리자만 접근할 수 있습니다.<br>
-      © 2026 우리쌀우리술 K-라이스페스타. All Rights Reserved.
-    </div>
-  </div>
-
-  <!-- 로그인 처리 로직 스크립트 로드 -->
-  <script src="js/login.js"></script>
-</body>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>web-admin</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
