@@ -36,6 +36,28 @@ services:
     networks:
       - fair-network
 
+  admin-web:
+    image: nginx:alpine
+    container_name: fair-admin-web
+    restart: always
+    ports:
+      - "${ADMIN_HOST_PORT}:${WEB_PORT}"
+    volumes:
+      - ./web-admin:/usr/share/nginx/html
+    networks:
+      - fair-network
+
+  user-web:
+    image: nginx:alpine
+    container_name: fair-user-web
+    restart: always
+    ports:
+      - "${USER_HOST_PORT}:${WEB_PORT}"
+    volumes:
+      - ./web-user:/usr/share/nginx/html
+    networks:
+      - fair-network
+
 volumes:
   db_data:
 

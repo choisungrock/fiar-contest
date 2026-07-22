@@ -8,7 +8,18 @@ from sqlalchemy.exc import SQLAlchemyError
 from api.admin.router import router as admin_router
 from api.user.router import router as user_router
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="K-Rice Festa Evaluation System API")
+
+# CORS 미들웨어 등록 (개발 편의를 위해 모든 Origin 허용, 실 배포 시 특정 도메인으로 축소 가능)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 라우터 등록 및 경로 접두사(Prefix) 분리
 app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
