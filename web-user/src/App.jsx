@@ -639,7 +639,7 @@ function App() {
                             backgroundColor: isComplete ? '#eaf3fb' : idx % 2 === 1 ? '#f7fafd' : '#ffffff'
                           }}
                         >
-                          <td className="sticky left-0 bg-inherit border-b border-r border-[#e3ebf5] py-[8px] text-center z-10 whitespace-nowrap">
+                          <td className="sticky left-0 bg-inherit border-b border-r border-[#e3ebf5] py-[10px] text-center z-10 whitespace-nowrap">
                             <div className="font-extrabold text-[#284c7d] text-[16px] leading-none">
                               {p.code}
                             </div>
@@ -655,7 +655,7 @@ function App() {
                           {cat.gwan.map(it => {
                             const val = pScores[it.key];
                             return (
-                              <td key={it.key} className="border-b border-r border-[#e3ebf5] p-[6px] text-center">
+                              <td key={it.key} className="border-b border-r border-[#e3ebf5] py-[8px] px-[6px] text-center">
                                 <button
                                   onClick={() => setModal({ code: p.code, itemKey: it.key })}
                                   className={`w-full h-[30px] rounded-[6px] border transition-all cursor-pointer ${
@@ -671,7 +671,7 @@ function App() {
                           })}
 
                           {/* 소계 칼럼 */}
-                          <td className="border-b p-[6px] text-center bg-[#f4f8fd] whitespace-nowrap">
+                          <td className="border-b py-[8px] px-[6px] text-center bg-[#f4f8fd] whitespace-nowrap">
                             <span className="text-[19px] font-extrabold text-[#b58a2e]">
                               {gwanSum}
                             </span>
