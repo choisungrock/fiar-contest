@@ -51,7 +51,7 @@ function App() {
       <div className="flex-1 flex overflow-hidden">
         
         {/* 좌측 배너 영역 */}
-        <div className="w-[40%] min-w-[380px] bg-gradient-to-b from-[#1b2a4a] to-[#243a63] text-white p-16 flex flex-col justify-between">
+        <div className="w-[40%] min-w-[380px] bg-gradient-to-b from-[#1b2a4a] to-[#243a63] text-white py-[64px] px-[56px] flex flex-col justify-between">
           <div>
             <div className="text-[14px] tracking-[3px] text-[#d9b866] font-bold">
               EXPERT EVALUATION
@@ -59,23 +59,23 @@ function App() {
             <h1 className="text-[40px] font-extrabold mt-[22px] leading-[1.25]">
               전문가 품평회<br />평가 시스템
             </h1>
-            <p className="text-[17px] text-[#b9c6df] mt-[20px] leading-[1.7] font-medium">
+            <p className="text-[17px] text-[#b9c6df] mt-[20px] leading-[1.7] font-semibold">
               2026 우리쌀·우리술<br />K-라이스페스타 품평회
             </p>
           </div>
-          <div className="text-[14px] text-[#8fa1c4] leading-[1.8] font-medium">
+          <div className="text-[14px] text-[#8fa1c4] leading-[1.8] font-semibold">
             태블릿 전용 · 블라인드/오픈 테스트<br />
             5단계 척도법 · 120점 만점
           </div>
         </div>
 
-        {/* 우측 로그인 폼 영역 */}
-        <div className="flex-1 bg-white p-12 flex items-center justify-center overflow-auto">
+        {/* 우측 로그인 폼 영역 (bg-white 제거하여 부모 배경색 eef1f6 투과) */}
+        <div className="flex-1 p-[48px] flex items-center justify-center overflow-auto">
           <div className="w-full max-w-[640px]">
-            <h2 className="text-[24px] font-bold text-[#1b2a4a]">
+            <h2 className="text-[24px] font-extrabold text-[#1b2a4a]">
               평가 시작
             </h2>
-            <p className="text-[15px] text-[#6b7890] mt-[8px] font-medium">
+            <p className="text-[15px] text-[#6b7890] mt-[8px] font-semibold">
               평가자명을 입력하고 담당 부문을 선택하세요.
             </p>
 
