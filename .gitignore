@@ -1,0 +1,36 @@
+# 품평회 평가 시스템 프로젝트에서 Git 버전 관리 제외 대상을 설정하는 파일
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak
+
+# 임시 빌드 및 종속성 관련 폴더 (차후 추가 대비)
+node_modules/
+dist/
+build/
+.cache/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 파이썬 가상환경 및 캐시 (차후 추가 대비)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+htmlcov/
+.pytest_cache/
