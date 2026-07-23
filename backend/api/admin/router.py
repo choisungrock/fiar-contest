@@ -119,7 +119,8 @@ class BumanItem(BaseModel):
     id: int = None
     prefix: str
     name: str
-    type: str
+    type: str = "open"
+    cat: str = "open"
 
 class ProductItem(BaseModel):
     id: int = None
@@ -192,7 +193,8 @@ def get_group_details(fg_id: int):
                     "id": r[0],
                     "prefix": r[1],
                     "name": r[2],
-                    "type": r[3]
+                    "type": r[3],
+                    "cat": r[3]
                 })
                 buman_ids[r[1]] = r[0]
 
@@ -357,9 +359,10 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest):
                 # 4. 부문 기입
                 prefix_to_fb_id = {}
                 for b in req.bumans:
+                    b_type = b.type if b.type else (b.cat if b.cat else "open")
                     conn.execute(
                         text("INSERT INTO fair_buman (fb_fg_id, fb_prefix, fb_name, fb_type) VALUES (:fg_id, :prefix, :name, :type)"),
-                        {"fg_id": fg_id, "prefix": b.prefix, "name": b.name, "type": b.type}
+                        {"fg_id": fg_id, "prefix": b.prefix, "name": b.name, "type": b_type}
                     )
                     inserted_fb_id = conn.execute(text("SELECT LAST_INSERT_ID()")).scalar()
                     prefix_to_fb_id[b.prefix] = inserted_fb_id

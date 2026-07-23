@@ -1031,12 +1031,12 @@ function App() {
                 <div className="grid grid-cols-[56px_160px_1.6fr_80px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
                   <div className="p-3 text-center">No.</div>
                   <div className="p-3">제품 분류코드</div>
-                  <div className="p-3">제품명 {activeBumanObject?.cat === 'blind' ? '(블라인드 비공개)' : ''}</div>
+                  <div className="p-3">제품명 {(activeBumanObject?.cat === 'blind' || activeBumanObject?.type === 'blind') ? '(블라인드 비공개)' : ''}</div>
                   <div className="p-3 text-center">삭제</div>
                 </div>
 
                 {(products[productBuman] || []).map((p, idx) => {
-                  const isBlind = activeBumanObject?.cat === 'blind';
+                  const isBlind = activeBumanObject?.cat === 'blind' || activeBumanObject?.type === 'blind';
 
                   return (
                     <div key={p.id} className="grid grid-cols-[56px_160px_1.6fr_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0">
@@ -1265,7 +1265,7 @@ function App() {
           {section === 'results' && (
             (() => {
               const rbk = bumans.some(b => b.prefix === resultBuman) ? resultBuman : (bumans[0]?.prefix || 'A');
-              const isBlind = activeResultBumanObject?.cat === 'blind';
+              const isBlind = activeResultBumanObject?.cat === 'blind' || activeResultBumanObject?.type === 'blind';
               const canTrim = judges.length >= 3;
 
               // 각 제품별 심사위원 채점 매트릭스 데이터 생성
