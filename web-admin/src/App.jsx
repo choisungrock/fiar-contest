@@ -612,9 +612,10 @@ function App() {
                   : { bg: '#f4f6fa', fg: '#8b97ab', bar: '#c3ccdb' };
 
               const isRice = group.id === 1;
-              const bumanCount = isRice ? counts.bumans : (group.bumanCount !== undefined ? group.bumanCount : (group.status === '준비중' ? 0 : 6));
-              const judgeCount = isRice ? counts.judges : (group.judgeCount !== undefined ? group.judgeCount : (group.status === '준비중' ? 0 : 8));
-              const productCount = isRice ? counts.products : (group.productCount !== undefined ? group.productCount : (group.status === '준비중' ? 0 : 32));
+              const isCurrentActive = group.id === activeGroup;
+              const bumanCount = isCurrentActive ? counts.bumans : (group.bumanCount ?? (group.status === '준비중' ? 0 : 6));
+              const judgeCount = isCurrentActive ? counts.judges : (group.judgeCount ?? (group.status === '준비중' ? 0 : 8));
+              const productCount = isCurrentActive ? counts.products : (group.productCount ?? (group.status === '준비중' ? 0 : 32));
 
               return (
                 <div

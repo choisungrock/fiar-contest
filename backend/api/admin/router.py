@@ -214,17 +214,19 @@ def get_group_details(fg_id: int):
 
             # 평가항목 템플릿
             templates_map = {"open": [], "blind": []}
-            for prefix, fb_id in buman_ids.items():
-                b_type = next((b["type"] for b in bumans_list if b["prefix"] == prefix), "open")
+            
+            # 오픈 방식 대표 평가 항목 세트 추출
+            open_fb_id = next((b["id"] for b in bumans_list if b["type"] == "open"), None)
+            if open_fb_id:
                 res_groups = conn.execute(
                     text("SELECT DISTINCT fei_group_name FROM fair_evaluation_item WHERE fei_fb_id = :fb_id"),
-                    {"fb_id": fb_id}
+                    {"fb_id": open_fb_id}
                 )
                 for rg in res_groups:
                     g_name = rg[0]
                     res_items = conn.execute(
                         text("SELECT fei_id, fei_name, fei_max_score, fei_convert_to FROM fair_evaluation_item WHERE fei_fb_id = :fb_id AND fei_group_name = :g_name ORDER BY fei_id ASC"),
-                        {"fb_id": fb_id, "g_name": g_name}
+                        {"fb_id": open_fb_id, "g_name": g_name}
                     )
                     items_list = []
                     convert_val = ""
@@ -236,8 +238,38 @@ def get_group_details(fg_id: int):
                         })
                         if ri[3] is not None:
                             convert_val = str(ri[3])
-                    templates_map[b_type].append({
-                        "id": fb_id,
+                    templates_map["open"].append({
+                        "id": open_fb_id,
+                        "name": g_name,
+                        "convertTo": convert_val,
+                        "items": items_list
+                    })
+
+            # 블라인드 방식 대표 평가 항목 세트 추출
+            blind_fb_id = next((b["id"] for b in bumans_list if b["type"] == "blind"), None)
+            if blind_fb_id:
+                res_groups = conn.execute(
+                    text("SELECT DISTINCT fei_group_name FROM fair_evaluation_item WHERE fei_fb_id = :fb_id"),
+                    {"fb_id": blind_fb_id}
+                )
+                for rg in res_groups:
+                    g_name = rg[0]
+                    res_items = conn.execute(
+                        text("SELECT fei_id, fei_name, fei_max_score, fei_convert_to FROM fair_evaluation_item WHERE fei_fb_id = :fb_id AND fei_group_name = :g_name ORDER BY fei_id ASC"),
+                        {"fb_id": blind_fb_id, "g_name": g_name}
+                    )
+                    items_list = []
+                    convert_val = ""
+                    for ri in res_items:
+                        items_list.append({
+                            "id": ri[0],
+                            "name": ri[1],
+                            "max": ri[2]
+                        })
+                        if ri[3] is not None:
+                            convert_val = str(ri[3])
+                    templates_map["blind"].append({
+                        "id": blind_fb_id,
                         "name": g_name,
                         "convertTo": convert_val,
                         "items": items_list
