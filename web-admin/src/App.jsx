@@ -497,7 +497,7 @@ function App() {
       showToast("이미 동일한 대상에 적용된 평가 구성이 존재합니다.");
       return;
     }
-    
+
     const newId = nextUid();
     const newTemplate = {
       id: newId,
@@ -697,7 +697,7 @@ function App() {
         if (dbBackup.templates && dbBackup.templates.length > 0) {
           setActiveTemplateId(dbBackup.templates[0].id);
         }
-        
+
         saveState({
           groups,
           systemName: dbBackup.systemName,
@@ -998,8 +998,8 @@ function App() {
                   }
                 }}
                 className={`flex items-center gap-3 w-full py-3 px-3.5 mb-1 rounded-[10px] cursor-pointer text-[14px] font-semibold border-none transition-all ${active
-                    ? 'bg-[#e03b3b] text-white font-extrabold'
-                    : 'bg-transparent text-[#c6d2ea] hover:bg-white/5'
+                  ? 'bg-[#e03b3b] text-white font-extrabold'
+                  : 'bg-transparent text-[#c6d2ea] hover:bg-white/5'
                   }`}
               >
                 <span className="w-[26px] text-[15px] text-center">{n.icon}</span>
@@ -1246,9 +1246,8 @@ function App() {
                       onDragOver={(e) => handleDragOver(e, idx)}
                       onDragEnd={handleDragEnd}
                       onDrop={(e) => handleDrop(e, idx)}
-                      className={`grid grid-cols-[56px_90px_110px_1.1fr_1.4fr_120px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0 transition-all select-none ${
-                        draggedIdx === idx ? 'opacity-40 bg-[#f4f6fa]/70 border-dashed border-primary/20' : 'bg-white'
-                      }`}
+                      className={`grid grid-cols-[56px_90px_110px_1.1fr_1.4fr_120px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0 transition-all select-none ${draggedIdx === idx ? 'opacity-40 bg-[#f4f6fa]/70 border-dashed border-primary/20' : 'bg-white'
+                        }`}
                     >
                       <div className="p-3 text-center font-bold text-[#8b97ab] cursor-grab active:cursor-grabbing flex items-center justify-center gap-1.5" title="드래그하여 순서 변경">
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-400">
@@ -1352,8 +1351,8 @@ function App() {
                         key={b.id}
                         onClick={() => setProductBuman(b.prefix)}
                         className={`flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] cursor-pointer text-[14px] border transition-all ${active
-                            ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
-                            : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
+                          ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
+                          : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
                           }`}
                       >
                         <span className="font-extrabold">{b.prefix}</span>
@@ -1449,7 +1448,7 @@ function App() {
                   <div className="text-[13px] font-bold text-primary tracking-wide border-b border-[#eef1f6] pb-2 uppercase">
                     평가 구성 목록 (타깃)
                   </div>
-                  
+
                   <div className="space-y-2.5 max-h-[460px] overflow-auto pr-1">
                     {templates.map((t, idx) => {
                       const isActive = activeTemplate && t.id === activeTemplate.id;
@@ -1464,22 +1463,21 @@ function App() {
                       } else {
                         const bm = bumans.find(b => b.prefix === t.target_id);
                         titleText = `[${t.target_id}] ${bm ? bm.name : ''} 전용`;
-                        subText = "부문별 개별 오버라이드 => 기본 공통보다 우선합니다.";
+                        subText = "기본 공통보다 우선합니다.";
                       }
 
                       return (
                         <div
                           key={t.id || idx}
                           onClick={() => setActiveTemplateId(t.id)}
-                          className={`relative p-3.5 rounded-xl border cursor-pointer transition-all select-none ${
-                            isActive
+                          className={`relative p-3.5 rounded-xl border cursor-pointer transition-all select-none ${isActive
                               ? 'border-primary bg-primary/5 text-primary font-bold shadow-sm'
                               : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
-                          }`}
+                            }`}
                         >
                           <div className="text-[14px]">{titleText}</div>
                           <div className="text-[11px] text-[#8b97ab] mt-1 font-semibold">{subText}</div>
-                          
+
                           {/* 개별 설정 카드 삭제 버튼 */}
                           {t.target_type !== 'open_all' && t.target_type !== 'blind_all' && (
                             <button
@@ -1733,14 +1731,14 @@ function App() {
                                               ...x,
                                               items: x.items.map(s => {
                                                 if (s.id !== it.id) return s;
-                                                
+
                                                 const mVal = parseInt(nextMax) || 0;
                                                 const steps = s.scaleValues ? s.scaleValues.split(',').length : 5;
                                                 const stepSize = mVal / steps;
                                                 const nextScaleValues = Array.from({ length: steps }, (_, i) => Math.round(stepSize * (i + 1))).join(', ');
-                                                
-                                                return { 
-                                                  ...s, 
+
+                                                return {
+                                                  ...s,
                                                   max: nextMax,
                                                   scaleValues: nextScaleValues
                                                 };
@@ -1763,7 +1761,7 @@ function App() {
                                       const stepSize = mVal / steps;
                                       const calculatedStr = Array.from({ length: steps }, (_, i) => Math.round(stepSize * (i + 1))).join(', ');
                                       const isMatched = it.scaleValues === calculatedStr || (!it.scaleValues && steps === 5);
-                                      
+
                                       return (
                                         <button
                                           key={steps}
@@ -1785,15 +1783,15 @@ function App() {
                                             setTemplates(next);
                                             saveState({ templates: next });
                                           }}
-                                          className={`py-0.5 px-1.5 text-[10px] rounded border transition-all cursor-pointer font-extrabold ${isMatched 
-                                            ? 'bg-[#1b2a4a] border-[#1b2a4a] text-white' 
+                                          className={`py-0.5 px-1.5 text-[10px] rounded border transition-all cursor-pointer font-extrabold ${isMatched
+                                            ? 'bg-[#1b2a4a] border-[#1b2a4a] text-white'
                                             : 'bg-white border-[#cbd3e1] text-[#5a6a82] hover:bg-gray-50'}`}
                                         >
                                           {steps}단계
                                         </button>
                                       );
                                     })}
-                                    
+
                                     <span className="text-[10px] text-gray-400 font-semibold ml-1">
                                       {it.scaleValues ? "커스텀 척도" : "자동 (5단계)"}
                                     </span>
@@ -1924,8 +1922,8 @@ function App() {
                           key={b.id}
                           onClick={() => setResultBuman(b.prefix)}
                           className={`flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] cursor-pointer text-[14px] border transition-all ${active
-                              ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
-                              : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
+                            ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
+                            : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
                             }`}
                         >
                           <span className="font-extrabold">{b.prefix}</span>
@@ -2017,10 +2015,10 @@ function App() {
                                 <td
                                   key={scIdx}
                                   className={`p-3 text-center font-semibold border-l border-[#f2f4f8] ${sc.isMax
-                                      ? 'text-[#2f5488] bg-blue-50/70 font-bold'
-                                      : sc.isMin
-                                        ? 'text-[#c0392b] bg-red-50/70 font-bold'
-                                        : 'text-[#3a475c]'
+                                    ? 'text-[#2f5488] bg-blue-50/70 font-bold'
+                                    : sc.isMin
+                                      ? 'text-[#c0392b] bg-red-50/70 font-bold'
+                                      : 'text-[#3a475c]'
                                     }`}
                                 >
                                   {sc.val}
@@ -2040,12 +2038,12 @@ function App() {
                               {/* 순위 */}
                               <td className="p-3 text-center bg-[#f4f6fb] border-l border-[#f2f4f8]">
                                 <span className={`inline-block w-6 h-6 rounded-full text-center leading-6 text-[12px] font-extrabold ${rank === 1
-                                    ? 'bg-[#d9b866] text-white'
-                                    : rank === 2
-                                      ? 'bg-gray-400 text-white'
-                                      : rank === 3
-                                        ? 'bg-[#b58a2e] text-white'
-                                        : 'bg-transparent text-[#5a6a82]'
+                                  ? 'bg-[#d9b866] text-white'
+                                  : rank === 2
+                                    ? 'bg-gray-400 text-white'
+                                    : rank === 3
+                                      ? 'bg-[#b58a2e] text-white'
+                                      : 'bg-transparent text-[#5a6a82]'
                                   }`}>
                                   {rank}
                                 </span>
