@@ -210,11 +210,7 @@ function App() {
       console.log("로그인 성공:", data);
       
       sessionStorage.setItem('kricefesta_admin_session', 'true');
-      if (rememberMe) {
-        localStorage.setItem('kricefesta_admin_remember', 'true');
-      } else {
-        localStorage.removeItem('kricefesta_admin_remember');
-      }
+      localStorage.setItem('kricefesta_admin_remember', 'true');
       
       setIsAuthed(true);
       showToast('성공적으로 관리자 콘솔에 접속하였습니다.');
@@ -445,25 +441,7 @@ function App() {
               로그인
             </button>
 
-            {/* 추가 제어 행 */}
-            <div className="flex items-center justify-between mt-[18px] text-xs font-semibold text-textBlue">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-3.5 h-3.5 accent-[#d9b866] cursor-pointer"
-                />
-                로그인 상태 유지
-              </label>
-              <a
-                href="#"
-                onClick={(e) => { e.preventDefault(); alert("품평회 운영국(02-1234-5678)에 문의해 주시기 바랍니다."); }}
-                className="text-[#d9b866] hover:text-yellow-200 hover:underline"
-              >
-                비밀번호 찾기
-              </a>
-            </div>
+            {/* 추가 제어 행 제거 완료 */}
           </form>
 
           {/* 안내 */}
