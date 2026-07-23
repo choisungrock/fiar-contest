@@ -185,6 +185,16 @@ function App() {
     }
   }, [isAuthed, view, activeGroup]);
 
+  // groups 목록이 갱신되거나 activeGroup이 바뀔 때, 해당 대회의 이름으로 systemName 동적 복원 보정
+  useEffect(() => {
+    if (groups.length > 0 && activeGroup) {
+      const matched = groups.find(g => g.id === activeGroup);
+      if (matched && matched.name) {
+        setSystemName(matched.name);
+      }
+    }
+  }, [groups, activeGroup]);
+
   // 전체 데이터 로컬 스토리지 보관 헬퍼
   const saveState = (patch) => {
     try {
