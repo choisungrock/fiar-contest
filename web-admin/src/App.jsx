@@ -634,11 +634,13 @@ function App() {
                   key={group.id}
                   onClick={() => {
                     setActiveGroup(group.id);
+                    setSystemName(group.name);
+                    setJudges([]);
+                    setBumans([]);
+                    setProducts({});
+                    setTemplates({ open: [], blind: [] });
                     setView('console');
                     setSection('overview');
-                    if (isRice) {
-                      setSystemName(group.name);
-                    }
                   }}
                   className="dashboard-card"
                   style={{
@@ -701,8 +703,8 @@ function App() {
   }
 
   // 3) 특정 대회 상세 콘솔 화면 렌더링 (`view === 'console'`)
-  const activeBumanObject = bumans.find(b => b.prefix === productBuman) || bumans[0];
-  const activeResultBumanObject = bumans.find(b => b.prefix === resultBuman) || bumans[0];
+  const activeBumanObject = bumans.find(b => b.prefix === productBuman) || bumans[0] || { fb_id: 9999, prefix: "", name: "등록된 부문 없음", type: "open" };
+  const activeResultBumanObject = bumans.find(b => b.prefix === resultBuman) || bumans[0] || { fb_id: 9999, prefix: "", name: "등록된 부문 없음", type: "open" };
 
   return (
     <div className="w-screen h-screen overflow-hidden bg-[#eef1f6] text-[#2b3646] flex select-none">
