@@ -78,7 +78,7 @@ function App() {
       return 'overview';
     }
   });
-  const [systemName, setSystemName] = useState('2026 우리쌀·우리술 K-라이스페스타 품평회');
+  const [systemName, setSystemName] = useState('');
   const [productBuman, setProductBuman] = useState('A');
   const [resultBuman, setResultBuman] = useState('A');
   const [template, setTemplate] = useState('open'); // open | blind (항목 설정용)
