@@ -85,79 +85,12 @@ function App() {
   const [toast, setToast] = useState('');
 
   // 3) 관리 리소스 데이터 상태
-  const [judges, setJudges] = useState([
-    { id: 1, name: '김심사', affiliation: '한국식품연구원', role: '심사위원장' },
-    { id: 2, name: '이평가', affiliation: '농촌진흥청', role: '심사위원' },
-    { id: 3, name: '박관능', affiliation: '전통주갤러리', role: '심사위원' },
-  ]);
-  const [bumans, setBumans] = useState([
-    { id: 1, prefix: 'A', cat: 'open', name: '조리' },
-    { id: 2, prefix: 'B', cat: 'open', name: '비조리' },
-    { id: 3, prefix: '가', cat: 'blind', name: '저도발효주' },
-    { id: 4, prefix: '나', cat: 'blind', name: '고도발효주' },
-  ]);
-  const [products, setProducts] = useState({
-    A: [
-      { id: 1, code: 'A-1', name: '미라클누룽지' },
-      { id: 2, code: 'A-2', name: '황금누룽지' },
-      { id: 3, code: 'A-3', name: '우리쌀김밥' },
-      { id: 4, code: 'A-4', name: '매콤쌀떡볶이' },
-    ],
-    B: [
-      { id: 1, code: 'B-1', name: '유기농쌀가루' },
-      { id: 2, code: 'B-2', name: '발아현미믹스' },
-      { id: 3, code: 'B-3', name: '즉석쌀죽' },
-    ],
-    '가': [
-      { id: 1, code: '가-1', name: '' },
-      { id: 2, code: '가-2', name: '' },
-      { id: 3, code: '가-3', name: '' },
-      { id: 4, code: '가-4', name: '' },
-    ],
-    '나': [
-      { id: 1, code: '나-1', name: '' },
-      { id: 2, code: '나-2', name: '' },
-      { id: 3, code: '나-3', name: '' },
-    ],
-  });
+  const [judges, setJudges] = useState([]);
+  const [bumans, setBumans] = useState([]);
+  const [products, setProducts] = useState({});
   const [templates, setTemplates] = useState({
-    open: [
-      {
-        id: 1,
-        name: '관능평가',
-        convertTo: 70,
-        items: [
-          { id: 1, name: '식품의 색', max: 15 },
-          { id: 2, name: '식품의 향', max: 15 },
-          { id: 3, name: '식품의 맛', max: 30 },
-          { id: 4, name: '식품의 식감', max: 20 },
-          { id: 5, name: '종합평가', max: 20 },
-        ],
-      },
-      {
-        id: 2,
-        name: '상품성평가',
-        convertTo: '',
-        items: [
-          { id: 1, name: '창의성', max: 30 },
-          { id: 2, name: '디자인', max: 20 },
-        ],
-      },
-    ],
-    blind: [
-      {
-        id: 1,
-        name: '관능평가',
-        convertTo: '',
-        items: [
-          { id: 1, name: '술의 색', max: 20 },
-          { id: 2, name: '술의 향', max: 20 },
-          { id: 3, name: '술의 맛', max: 30 },
-          { id: 4, name: '후미 및 목넘김', max: 20 },
-          { id: 5, name: '종합평가', max: 30 },
-        ],
-      },
-    ],
+    open: [],
+    blind: []
   });
 
   useEffect(() => {
