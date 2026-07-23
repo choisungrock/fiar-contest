@@ -867,7 +867,7 @@ function App() {
                     setJudges([]);
                     setBumans([]);
                     setProducts({});
-                    setTemplates({ open: [], blind: [] });
+                    setTemplates([]);
                     setView('console');
                     setSection('overview');
                   }}
