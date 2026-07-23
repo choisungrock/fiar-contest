@@ -891,7 +891,7 @@ function App() {
                 <div className="mt-3 flex gap-3 flex-wrap">
                   {bumans.length === 0 ? (
                     <div className="w-full border border-dashed border-[#c3ccdb] bg-[#f4f6fa] rounded-[12px] p-5 text-center text-[#8b97ab] font-bold text-[13px]">
-                      등록된 부문이 없으므로 평가 방식 정보가 "등록전"입니다.
+                      평가방식이 아직 정해지지 않았습니다. 평가항목 설정이 안되있습니다.
                     </div>
                   ) : (
                     <>
