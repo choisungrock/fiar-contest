@@ -41,7 +41,42 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6, p, label, button, input, textarea, div, span {
+  * {
+    box-sizing: border-box;
+  }
+
+  h1, h2, h3, h4, h5, h6, p, label, button, input, textarea, div, span, select, table, th, td {
     line-height: 1.15;
   }
+
+  a {
+    color: #b58a2e;
+    transition: color 0.15s;
+  }
+  a:hover {
+    color: #9a7420;
+  }
+
+  ::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #c3ccdb;
+    border-radius: 6px;
+  }
+
+  input:focus, select:focus {
+    outline: 2px solid #b9c6df;
+    outline-offset: -1px;
+  }
+
+  /* 대시보드 카드 호버 전환 효과 */
+  .dashboard-card {
+    transition: box-shadow 0.15s ease-in-out, transform 0.15s ease-in-out;
+  }
+  .dashboard-card:hover {
+    box-shadow: 0 10px 30px rgba(27, 42, 74, 0.14) !important;
+  }
 }
+

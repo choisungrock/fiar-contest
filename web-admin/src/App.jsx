@@ -468,32 +468,38 @@ function App() {
 
   // 2) 로그인 완료 후 ➡️ 대시보드 메인 화면 렌더링
   if (view === 'dashboard') {
+    const dashStats = [
+      { label: '전체 대그룹', value: groups.length + '개' },
+      { label: '진행중', value: groups.filter(g => g.status === '진행중').length + '개' },
+      { label: '완료', value: groups.filter(g => g.status === '완료').length + '개' },
+    ];
+
     return (
-      <div className="w-screen h-screen overflow-hidden bg-[#eef1f6] text-[#2b3646] flex flex-col select-none">
+      <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#eef1f6', color: '#2b3646', display: 'flex', flexDirection: 'column' }}>
         
         {/* 상단 띠 배너 헤더 */}
-        <div className="bg-gradient-to-r from-[#1b2a4a] to-[#243a63] text-white py-[30px] px-[40px] flex items-center gap-5 shrink-0">
-          <div className="flex-1">
-            <div className="text-[12px] tracking-[2px] text-[#d9b866] font-bold">
+        <div style={{ background: 'linear-gradient(135deg,#1b2a4a,#243a63)', color: '#fff', padding: '30px 40px', display: 'flex', alignItems: 'center', gap: '20px', flexShrink: 0 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '12px', letterSpacing: '2px', color: '#d9b866', fontWeight: 700 }}>
               ADMIN CONSOLE · DASHBOARD
             </div>
-            <div className="mt-2 text-[26px] font-extrabold leading-none">
+            <div style={{ marginTop: '8px', fontSize: '26px', fontWeight: 800 }}>
               전문가 품평회 평가 시스템
             </div>
-            <div className="mt-1.5 text-[14px] text-bannerText">
+            <div style={{ marginTop: '5px', fontSize: '14px', color: '#9db0d4' }}>
               대그룹(품평회)을 생성하고 진행 상태를 관리합니다.
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
               onClick={handleAddGroup}
-              className="bg-[#e03b3b] border-none text-white rounded-[11px] h-[50px] px-6 text-[15px] font-extrabold cursor-pointer hover:bg-[#c0392b] transition-all"
+              style={{ background: '#e03b3b', border: 'none', color: '#fff', borderRadius: '11px', height: '50px', padding: '0 24px', fontSize: '15px', fontWeight: 800, cursor: 'pointer' }}
             >
               + 새 대그룹 만들기
             </button>
             <button
               onClick={handleLogout}
-              className="bg-transparent border border-white/20 text-[#c6d2ea] rounded-[11px] h-[50px] px-5 text-[14px] font-semibold cursor-pointer hover:bg-white/10 transition-all"
+              style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#c6d2ea', borderRadius: '11px', height: '50px', padding: '0 20px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
             >
               로그아웃
             </button>
@@ -501,38 +507,33 @@ function App() {
         </div>
 
         {/* 통계 요약 카드 배치 */}
-        <div className="flex-grow overflow-auto py-7 px-10 pb-[60px]">
-          <div className="flex gap-4 mb-6 flex-wrap">
-            <div className="flex-1 min-w-[180px] bg-white border border-[#e5e9f0] rounded-[14px] py-4 px-[22px]">
-              <div className="text-[13px] text-[#8b97ab] font-semibold">총 품평회 수</div>
-              <div className="mt-1.5 text-[30px] font-extrabold text-[#1b2a4a] leading-none">{groups.length}개</div>
-            </div>
-            <div className="flex-1 min-w-[180px] bg-white border border-[#e5e9f0] rounded-[14px] py-4 px-[22px]">
-              <div className="text-[13px] text-[#8b97ab] font-semibold">현재 활성화</div>
-              <div className="mt-1.5 text-[30px] font-extrabold text-[#1b2a4a] leading-none">
-                {groups.filter(g => g.status === '진행중').length}개
+        <div style={{ flex: 1, overflow: 'auto', padding: '28px 40px 60px' }}>
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
+            {dashStats.map((s, idx) => (
+              <div key={idx} style={{ flex: 1, minWidth: '180px', background: '#fff', border: '1px solid #e5e9f0', borderRadius: '14px', padding: '18px 22px' }}>
+                <div style={{ fontSize: '13px', color: '#8b97ab', fontWeight: 600 }}>{s.label}</div>
+                <div style={{ marginTop: '6px', fontSize: '30px', fontWeight: 800, color: '#1b2a4a' }}>{s.value}</div>
               </div>
-            </div>
-            <div className="flex-1 min-w-[180px] bg-white border border-[#e5e9f0] rounded-[14px] py-4 px-[22px]">
-              <div className="text-[13px] text-[#8b97ab] font-semibold">평균 진행률</div>
-              <div className="mt-1.5 text-[30px] font-extrabold text-[#1b2a4a] leading-none">
-                {Math.round(groups.reduce((acc, g) => acc + g.progress, 0) / groups.length)}%
-              </div>
-            </div>
+            ))}
           </div>
 
-          <div className="text-[15px] font-extrabold text-[#1b2a4a] mb-3.5">
+          <div style={{ fontSize: '15px', fontWeight: 800, color: '#1b2a4a', marginBottom: '14px' }}>
             대그룹 목록
           </div>
           
           {/* 품평회 카드 리스트 그리드 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[18px]">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '18px' }}>
             {groups.map((group) => {
-              // 해당 그룹의 하위 요소를 더미/실측 데이터로 매칭
+              const sc = group.status === '진행중'
+                ? { bg: '#eaf3fb', fg: '#2f5488', bar: '#2f5488' }
+                : group.status === '완료'
+                ? { bg: '#eef7f1', fg: '#2f7a4f', bar: '#2f7a4f' }
+                : { bg: '#f4f6fa', fg: '#8b97ab', bar: '#c3ccdb' };
+
               const isRice = group.id === 1;
-              const bumanCount = isRice ? counts.bumans : 0;
-              const judgeCount = isRice ? counts.judges : 0;
-              const productCount = isRice ? counts.products : 0;
+              const bumanCount = isRice ? counts.bumans : (group.status === '준비중' ? 0 : 6);
+              const judgeCount = isRice ? counts.judges : (group.status === '준비중' ? 0 : 8);
+              const productCount = isRice ? counts.products : (group.status === '준비중' ? 0 : 32);
 
               return (
                 <div
@@ -541,28 +542,70 @@ function App() {
                     setActiveGroup(group.id);
                     setView('console');
                     setSection('overview');
+                    if (isRice) {
+                      setSystemName(group.name);
+                    }
                   }}
-                  className="bg-white border border-[#e5e9f0] rounded-[16px] py-[22px] px-6 cursor-pointer transition-all hover:shadow-[0_10px_30px_rgba(27,42,74,0.14)]"
+                  className="dashboard-card"
+                  style={{
+                    background: '#fff',
+                    border: '1px solid #e5e9f0',
+                    borderRadius: '16px',
+                    padding: '22px 24px',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 2px rgba(27,42,74,.04)'
+                  }}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 text-[18px] font-extrabold text-[#1b2a4a] leading-tight">
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{ flex: 1, fontSize: '18px', fontWeight: 800, color: '#1b2a4a', lineHeight: 1.4 }}>
                       {isRice ? systemName : group.name}
                     </div>
-                    <span className={`inline-block py-1 px-3 text-[11px] font-bold rounded-full ${
-                      group.status === '진행중' ? 'bg-green-100 text-green-700' : group.status === '완료' ? 'bg-gray-200 text-gray-700' : 'bg-yellow-100 text-yellow-700'
-                    }`}>
+                    <span style={{ background: sc.bg, color: sc.fg, borderRadius: '8px', padding: '5px 12px', fontSize: '12px', fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0 }}>
                       {group.status}
                     </span>
                   </div>
 
-                  <div className="mt-2 text-[13px] text-[#8b97ab] font-semibold">
+                  <div style={{ marginTop: '8px', fontSize: '13px', color: '#8b97ab', fontWeight: 600 }}>
                     {group.period}
                   </div>
 
-                  <div className="mt-4.5 display-flex flex gap-[22px]">
+                  <div style={{ marginTop: '18px', display: 'flex', gap: '22px' }}>
                     <div>
-                      <div className="text-[11px] text-[#9aa6bb] font-semibold">부문</div>
-                      <div className="mt-[2px] text-[20px] font-extrabold text-[#3a475c] leading-none">{bumanCount}</div>
+                      <div style={{ fontSize: '11px', color: '#9aa6bb', fontWeight: 600 }}>부문</div>
+                      <div style={{ marginTop: '2px', fontSize: '20px', fontWeight: 800, color: '#3a475c' }}>{bumanCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#9aa6bb', fontWeight: 600 }}>평가자</div>
+                      <div style={{ marginTop: '2px', fontSize: '20px', fontWeight: 800, color: '#3a475c' }}>{judgeCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#9aa6bb', fontWeight: 600 }}>제품</div>
+                      <div style={{ marginTop: '2px', fontSize: '20px', fontWeight: 800, color: '#3a475c' }}>{productCount}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '18px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 700, color: '#8b97ab', marginBottom: '6px' }}>
+                      <span>평가 진행률</span>
+                      <span style={{ color: '#b58a2e' }}>{group.progress}%</span>
+                    </div>
+                    <div style={{ height: '8px', borderRadius: '6px', background: '#eef1f6', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${group.progress}%`, background: sc.bar, borderRadius: '6px' }}></div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '18px', fontSize: '13px', fontWeight: 800, color: '#e03b3b' }}>
+                    관리하기 →
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+] font-extrabold text-[#3a475c] leading-none">{bumanCount}</div>
                     </div>
                     <div>
                       <div className="text-[11px] text-[#9aa6bb] font-semibold">평가자</div>
