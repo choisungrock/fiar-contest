@@ -78,5 +78,15 @@
   .dashboard-card:hover {
     box-shadow: 0 10px 30px rgba(27, 42, 74, 0.14) !important;
   }
+
+  /* 헤더 로그아웃 아이콘 버튼 호버 효과 */
+  .logout-btn-header {
+    transition: all 0.15s ease-in-out !important;
+  }
+  .logout-btn-header:hover {
+    background: rgba(255, 255, 255, 0.14) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    transform: translateY(-1px);
+  }
 }
 
