@@ -379,7 +379,6 @@ function App() {
     const newJudges = judges.filter(j => j.id !== id);
     setJudges(newJudges);
     saveState({ judges: newJudges });
-    showToast('심사위원이 목록에서 제거되었습니다.');
   };
 
   // 부문 추가
@@ -409,7 +408,6 @@ function App() {
     } else {
       saveState({ bumans: newBumans });
     }
-    showToast('선택한 부문이 삭제되었습니다.');
   };
 
   // 제품 추가
@@ -434,7 +432,6 @@ function App() {
     };
     setProducts(nextProducts);
     saveState({ products: nextProducts });
-    showToast('선택한 평가 제품이 삭제되었습니다.');
   };
 
   // 평가항목 그룹 추가
