@@ -136,7 +136,7 @@ class EvalItem(BaseModel):
 class EvalGroup(BaseModel):
     id: int = None
     name: str
-    convertTo: str = ""
+    convertTo: Union[int, str, None] = ""
     items: list[EvalItem]
 
 from typing import Union
@@ -354,7 +354,13 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest):
                     inserted_fet_id = conn.execute(text("SELECT LAST_INSERT_ID()")).scalar()
 
                     for g in t.groups:
-                        conv_val = int(g.convertTo) if g.convertTo and g.convertTo.isdigit() else None
+                        conv_val = None
+                        if g.convertTo is not None:
+                            if isinstance(g.convertTo, int):
+                                conv_val = g.convertTo
+                            elif isinstance(g.convertTo, str) and g.convertTo.strip().isdigit():
+                                conv_val = int(g.convertTo)
+
                         for item in g.items:
                             conn.execute(
                                 text("INSERT INTO fair_evaluation_item (fei_fet_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES (:fet_id, :g_name, :name, :max, :conv)"),
