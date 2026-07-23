@@ -1474,8 +1474,8 @@ function App() {
                           key={t.id || idx}
                           onClick={() => setActiveTemplateId(t.id)}
                           className={`relative p-3.5 rounded-xl border cursor-pointer transition-all select-none ${isActive
-                              ? 'border-primary bg-primary/5 text-primary font-bold shadow-sm'
-                              : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
+                            ? 'border-primary bg-primary/5 text-primary font-bold shadow-sm'
+                            : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
                             }`}
                         >
                           <div className="text-[14px]">{titleText}</div>
@@ -1877,7 +1877,7 @@ function App() {
               const getJudgeDetailedScores = (pIdx, jIdx, p) => {
                 const h = hashStr(p.code);
                 const baseRatio = 0.78 + ((h + pIdx * 13 + jIdx * 7) % 21) / 100;
-                
+
                 const groupResults = [];
                 let totalRawScore = 0;
                 let totalConvertedScore = 0;
@@ -1887,11 +1887,11 @@ function App() {
                   matchTemplate.groups.forEach((g) => {
                     const gMaxRaw = (g.items || []).reduce((sum, it) => sum + (parseInt(it.max) || 0), 0);
                     const gConvertTo = parseInt(g.convertTo) || 0;
-                    
+
                     let gRawScore = Math.round(gMaxRaw * baseRatio);
                     let assignedRawSum = 0;
                     const gItems = g.items || [];
-                    
+
                     gItems.forEach((it, idx) => {
                       const itMax = parseInt(it.max) || 0;
                       let itScore = 0;
@@ -1904,17 +1904,17 @@ function App() {
                       itScore = Math.min(itMax, itScore);
                       itemScoresMap[it.id] = itScore;
                     });
-                    
+
                     const actualRawSum = gItems.reduce((sum, it) => sum + (itemScoresMap[it.id] || 0), 0);
-                    
+
                     let gConverted = actualRawSum;
                     if (gConvertTo > 0 && gMaxRaw > 0) {
                       gConverted = Math.round((actualRawSum / gMaxRaw) * gConvertTo);
                     }
-                    
+
                     totalRawScore += actualRawSum;
                     totalConvertedScore += gConverted;
-                    
+
                     groupResults.push({
                       groupId: g.id,
                       rawSum: actualRawSum,
@@ -1925,7 +1925,7 @@ function App() {
                   const s120 = sampleScore(pIdx, jIdx, p.code);
                   totalConvertedScore = s120;
                 }
-                
+
                 return {
                   itemScores: itemScoresMap,
                   groupScores: groupResults,
@@ -2131,7 +2131,7 @@ function App() {
                                     // 이 심사위원의 해당 제품의 최종 환산 점수를 구함
                                     const detailed = getJudgeDetailedScores(idx, jIdx, products[rbk][idx]);
                                     const scoreVal = detailed.totalConverted;
-                                    
+
                                     // 최고/최저 점수 마크 판정용 임시 탐색
                                     const allScores = judges.map((_, tmpIdx) => getJudgeDetailedScores(idx, tmpIdx, products[rbk][idx]).totalConverted);
                                     let isMin = false;
@@ -2224,7 +2224,7 @@ function App() {
                               <th colSpan="1" rowSpan="2" className="sticky left-[90px] bg-[#1b2a4a] text-white p-3.5 font-extrabold text-left min-w-[150px] border-r border-[#243a63] z-10">
                                 제품명
                               </th>
-                              
+
                               {/* 템플릿의 각 그룹 */}
                               {matchTemplate && matchTemplate.groups && matchTemplate.groups.map(g => {
                                 const gItems = g.items || [];
@@ -2244,7 +2244,7 @@ function App() {
                                   </React.Fragment>
                                 );
                               })}
-                              
+
                               {/* 최종 합산 */}
                               <th colSpan="1" rowSpan="2" className="bg-[#284c7d] text-white p-2.5 font-extrabold text-center border-r border-[#315b94] min-w-[75px]">
                                 배점합계
@@ -2259,7 +2259,7 @@ function App() {
                                 순위
                               </th>
                             </tr>
-                            
+
                             {/* 2단 헤더 (세부 항목명) */}
                             <tr className="bg-[#243a63] text-white text-[11px] border-b border-[#243a63]">
                               {matchTemplate && matchTemplate.groups && matchTemplate.groups.map(g => (
@@ -2285,12 +2285,12 @@ function App() {
                                   <td className="sticky left-[90px] bg-inherit p-3.5 font-semibold text-[#3a475c] text-left z-10 truncate max-w-[150px]">
                                     {r.name}
                                   </td>
-                                  
+
                                   {/* 각 그룹별 세부 점수 및 배점합/환산점수 */}
                                   {matchTemplate && matchTemplate.groups && matchTemplate.groups.map(g => {
                                     const gItems = g.items || [];
                                     const gScore = r.detailed.groupScores.find(gs => gs.groupId === g.id);
-                                    
+
                                     return (
                                       <React.Fragment key={g.id}>
                                         {gItems.map(it => (
@@ -2309,7 +2309,7 @@ function App() {
                                       </React.Fragment>
                                     );
                                   })}
-                                  
+
                                   {/* 최종합계 내역 */}
                                   {/* 최종 배점합 */}
                                   <td className="p-3 text-center font-bold text-[#284c7d] bg-[#f0f4fa] border-l border-[#eef1f6]">
@@ -2375,7 +2375,7 @@ function App() {
                           judgeSheets.forEach((sheet) => {
                             const row1 = ["제품분류코드", "제품명"];
                             const row2 = ["", ""];
-                            
+
                             if (matchTemplate && matchTemplate.groups) {
                               matchTemplate.groups.forEach((g) => {
                                 const gItems = g.items || [];
@@ -2399,7 +2399,7 @@ function App() {
 
                             sheet.rows.forEach((r) => {
                               const dataRow = [r.code, r.name];
-                              
+
                               if (matchTemplate && matchTemplate.groups) {
                                 matchTemplate.groups.forEach((g) => {
                                   const gItems = g.items || [];
@@ -2411,7 +2411,7 @@ function App() {
                                   dataRow.push(gScore ? gScore.converted : 0);
                                 });
                               }
-                              
+
                               dataRow.push(
                                 r.detailed.totalRaw,
                                 r.detailed.totalConverted,
@@ -2446,7 +2446,7 @@ function App() {
                   </div>
 
                   <div className="text-[12px] text-[#8b97ab] leading-relaxed max-w-[1100px]">
-                    ※ 이 점수는 가이드 시연용 자동 난수 배치입니다. 심사위원 태블릿 어플리케이션에서 실제로 저장 및 전송된 점수가 있을 경우 실시간 병합되어 정확한 집계 결과와 순위가 관리자 대시보드 상에 연동 갱신됩니다.
+                    ※ 심사위원 태블릿 어플리케이션에서 실제로 저장 및 전송된 점수가 있을 경우 실시간 병합되어 정확한 집계 결과와 순위가 연동 갱신됩니다.
                   </div>
                 </div>
               );
