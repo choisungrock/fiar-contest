@@ -41,18 +41,28 @@ CREATE TABLE IF NOT EXISTS fair_product (
   FOREIGN KEY (fp_fb_id) REFERENCES fair_buman(fb_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- 5. 평가 항목 테이블
+-- 5. 평가 템플릿 테이블
+CREATE TABLE IF NOT EXISTS fair_evaluation_template (
+  fet_id INT AUTO_INCREMENT PRIMARY KEY,
+  fet_fg_id INT NOT NULL,
+  fet_target_type VARCHAR(30) NOT NULL,
+  fet_target_id INT NULL,
+  FOREIGN KEY (fet_fg_id) REFERENCES fair_group(fg_id) ON DELETE CASCADE,
+  UNIQUE KEY uq_fet (fet_fg_id, fet_target_type, fet_target_id)
+) ENGINE=InnoDB;
+
+-- 6. 평가 항목 테이블
 CREATE TABLE IF NOT EXISTS fair_evaluation_item (
   fei_id INT AUTO_INCREMENT PRIMARY KEY,
-  fei_fb_id INT NOT NULL,
+  fei_fet_id INT NOT NULL,
   fei_group_name VARCHAR(50) NOT NULL,
   fei_name VARCHAR(100) NOT NULL,
   fei_max_score INT NOT NULL,
   fei_convert_to INT,
-  FOREIGN KEY (fei_fb_id) REFERENCES fair_buman(fb_id) ON DELETE CASCADE
+  FOREIGN KEY (fei_fet_id) REFERENCES fair_evaluation_template(fet_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- 6. 점수 기록 테이블
+-- 7. 점수 기록 테이블
 CREATE TABLE IF NOT EXISTS fair_score_record (
   fsr_id INT AUTO_INCREMENT PRIMARY KEY,
   fsr_fj_id INT NOT NULL,
@@ -98,34 +108,29 @@ INSERT INTO fair_product (fp_id, fp_fb_id, fp_code, fp_name) VALUES
 (7, 3, '가-1', ''),
 (8, 3, '가-2', '');
 
--- 5. 평가 항목 (오픈/블라인드 기준)
--- 오픈 부문 (조리: fb_id = 1, 비조리: fb_id = 2)
-INSERT INTO fair_evaluation_item (fei_id, fei_fb_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES
--- 조리 관능평가 (최대 100점 -> 70점 환산)
+-- 5. 평가 템플릿
+INSERT INTO fair_evaluation_template (fet_id, fet_fg_id, fet_target_type, fet_target_id) VALUES
+(1, 1, 'open_all', NULL),
+(2, 1, 'blind_all', NULL);
+
+-- 6. 평가 항목 (템플릿 기준)
+-- 오픈 공통 템플릿 (fet_id = 1)
+INSERT INTO fair_evaluation_item (fei_id, fei_fet_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES
+-- 관능평가 (최대 100점 -> 70점 환산)
 (1, 1, '관능평가', '식품의 색', 15, 70),
 (2, 1, '관능평가', '식품의 향', 15, 70),
 (3, 1, '관능평가', '식품의 맛', 30, 70),
 (4, 1, '관능평가', '식품의 식감', 20, 70),
 (5, 1, '관능평가', '종합평가', 20, 70),
--- 조리 상품성평가 (최대 50점 -> 환산 없음)
+-- 상품성평가
 (6, 1, '상품성평가', '창의성', 30, NULL),
-(7, 1, '상품성평가', '디자인', 20, NULL),
+(7, 1, '상품성평가', '디자인', 20, NULL);
 
--- 비조리 관능평가 (최대 100점 -> 70점 환산)
-(8, 2, '관능평가', '식품의 색', 15, 70),
-(9, 2, '관능평가', '식품의 향', 15, 70),
-(10, 2, '관능평가', '식품의 맛', 30, 70),
-(11, 2, '관능평가', '식품의 식감', 20, 70),
-(12, 2, '관능평가', '종합평가', 20, 70),
--- 비조리 상품성평가
-(13, 2, '상품성평가', '창의성', 30, NULL),
-(14, 2, '상품성평가', '디자인', 20, NULL);
-
--- 블라인드 부문 (저도발효주: fb_id = 3)
-INSERT INTO fair_evaluation_item (fei_id, fei_fb_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES
--- 저도발효주 관능평가 (최대 120점 -> 환산 없음)
-(15, 3, '관능평가', '술의 색', 20, NULL),
-(16, 3, '관능평가', '술의 향', 20, NULL),
-(17, 3, '관능평가', '술의 맛', 30, NULL),
-(18, 3, '관능평가', '후미 및 목넘김', 20, NULL),
-(19, 3, '관능평가', '종합평가', 30, NULL);
+-- 블라인드 공통 템플릿 (fet_id = 2)
+INSERT INTO fair_evaluation_item (fei_id, fei_fet_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES
+-- 관능평가
+(8, 2, '관능평가', '술의 색', 20, NULL),
+(9, 2, '관능평가', '술의 향', 20, NULL),
+(10, 2, '관능평가', '술의 맛', 30, NULL),
+(11, 2, '관능평가', '후미 및 목넘김', 20, NULL),
+(12, 2, '관능평가', '종합평가', 30, NULL);

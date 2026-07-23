@@ -91,19 +91,20 @@ function App() {
     judges: [],
     bumans: [],
     products: {},
-    templates: { open: [], blind: [] }
+    templates: []
   });
   const [toast, setToast] = useState('');
   const [draggedIdx, setDraggedIdx] = useState(null);
+  const [showAddTemplateForm, setShowAddTemplateForm] = useState(false);
+  const [newTemplateTargetType, setNewTemplateTargetType] = useState('open_all');
+  const [newTemplateTargetId, setNewTemplateTargetId] = useState('');
 
   // 3) 관리 리소스 데이터 상태
   const [judges, setJudges] = useState([]);
   const [bumans, setBumans] = useState([]);
   const [products, setProducts] = useState({});
-  const [templates, setTemplates] = useState({
-    open: [],
-    blind: []
-  });
+  const [templates, setTemplates] = useState([]);
+  const [activeTemplateId, setActiveTemplateId] = useState(null);
 
   useEffect(() => {
     try {
@@ -185,7 +186,11 @@ function App() {
           setJudges(data.judges || []);
           setBumans(data.bumans || []);
           setProducts(data.products || {});
-          setTemplates(data.templates || { open: [], blind: [] });
+          const fetchedTemplates = data.templates || [];
+          setTemplates(fetchedTemplates);
+          if (fetchedTemplates.length > 0) {
+            setActiveTemplateId(fetchedTemplates[0].id);
+          }
 
           let parsedStart = '';
           let parsedEnd = '';
@@ -220,7 +225,7 @@ function App() {
             judges: data.judges || [],
             bumans: data.bumans || [],
             products: data.products || {},
-            templates: data.templates || { open: [], blind: [] }
+            templates: fetchedTemplates
           });
         }
       } else {
@@ -467,47 +472,107 @@ function App() {
     saveState({ products: nextProducts });
   };
 
+  // 템플릿 추가
+  const handleAddTemplate = (targetType, targetId = null) => {
+    const exists = templates.some(t => t.target_type === targetType && t.target_id === targetId);
+    if (exists) {
+      showToast("이미 동일한 대상에 적용된 평가 구성이 존재합니다.");
+      return;
+    }
+    
+    const newId = nextUid();
+    const newTemplate = {
+      id: newId,
+      target_type: targetType,
+      target_id: targetId,
+      groups: []
+    };
+    const nextTemplates = [...templates, newTemplate];
+    setTemplates(nextTemplates);
+    setActiveTemplateId(newId);
+    saveState({ templates: nextTemplates });
+  };
+
+  // 템플릿 삭제
+  const handleDeleteTemplate = (fetId) => {
+    const target = templates.find(t => t.id === fetId);
+    if (target && (target.target_type === 'open_all' || target.target_type === 'blind_all')) {
+      showToast("공통 평가 구성은 삭제할 수 없습니다.");
+      return;
+    }
+
+    const nextTemplates = templates.filter(t => t.id !== fetId);
+    setTemplates(nextTemplates);
+    if (activeTemplateId === fetId) {
+      setActiveTemplateId(nextTemplates[0]?.id || null);
+    }
+    saveState({ templates: nextTemplates });
+  };
+
   // 평가항목 그룹 추가
   const handleAddItemGroup = () => {
-    const list = templates[template] || [];
-    const nextTemplates = {
-      ...templates,
-      [template]: [...list, { id: nextUid(), name: '신규 평가 항목군', convertTo: '', items: [] }]
-    };
+    if (!activeTemplateId) return;
+    const nextTemplates = templates.map(t => {
+      if (t.id !== activeTemplateId) return t;
+      return {
+        ...t,
+        groups: [...t.groups, { id: nextUid(), name: '신규 평가 항목군', convertTo: '', items: [] }]
+      };
+    });
+    setTemplates(nextTemplates);
+    saveState({ templates: nextTemplates });
+  };
+
+  // 평가항목 그룹 삭제
+  const handleDeleteItemGroup = (gid) => {
+    if (!activeTemplateId) return;
+    const nextTemplates = templates.map(t => {
+      if (t.id !== activeTemplateId) return t;
+      return {
+        ...t,
+        groups: t.groups.filter(g => g.id !== gid)
+      };
+    });
     setTemplates(nextTemplates);
     saveState({ templates: nextTemplates });
   };
 
   // 평가항목 그룹 내 단일 항목 추가
   const handleAddSingleItem = (gid) => {
-    const list = templates[template] || [];
-    const nextTemplates = {
-      ...templates,
-      [template]: list.map(g => {
-        if (g.id !== gid) return g;
-        return {
-          ...g,
-          items: [...g.items, { id: nextUid(), name: '', max: 10 }]
-        };
-      })
-    };
+    if (!activeTemplateId) return;
+    const nextTemplates = templates.map(t => {
+      if (t.id !== activeTemplateId) return t;
+      return {
+        ...t,
+        groups: t.groups.map(g => {
+          if (g.id !== gid) return g;
+          return {
+            ...g,
+            items: [...g.items, { id: nextUid(), name: '', max: 10 }]
+          };
+        })
+      };
+    });
     setTemplates(nextTemplates);
     saveState({ templates: nextTemplates });
   };
 
   // 평가항목 그룹 내 단일 항목 삭제
   const handleDeleteSingleItem = (gid, itid) => {
-    const list = templates[template] || [];
-    const nextTemplates = {
-      ...templates,
-      [template]: list.map(g => {
-        if (g.id !== gid) return g;
-        return {
-          ...g,
-          items: g.items.filter(it => it.id !== itid)
-        };
-      })
-    };
+    if (!activeTemplateId) return;
+    const nextTemplates = templates.map(t => {
+      if (t.id !== activeTemplateId) return t;
+      return {
+        ...t,
+        groups: t.groups.map(g => {
+          if (g.id !== gid) return g;
+          return {
+            ...g,
+            items: g.items.filter(it => it.id !== itid)
+          };
+        })
+      };
+    });
     setTemplates(nextTemplates);
     saveState({ templates: nextTemplates });
   };
@@ -611,6 +676,9 @@ function App() {
         setBumans(dbBackup.bumans);
         setProducts(dbBackup.products);
         setTemplates(dbBackup.templates);
+        if (dbBackup.templates && dbBackup.templates.length > 0) {
+          setActiveTemplateId(dbBackup.templates[0].id);
+        }
         
         saveState({
           groups,
@@ -631,7 +699,7 @@ function App() {
     judges: judges.length,
     bumans: bumans.length,
     products: Object.values(products).reduce((acc, list) => acc + list.length, 0),
-    items: Object.values(templates).reduce((acc, gs) => acc + gs.reduce((sum, g) => sum + g.items.length, 0), 0)
+    items: templates.reduce((acc, t) => acc + (t.groups || []).reduce((sum, g) => sum + (g.items || []).length, 0), 0)
   };
 
   // 1) 로그인하지 않은 상태 ➡️ 로그인 페이지 렌더링
@@ -1341,173 +1409,361 @@ function App() {
           })()}
 
           {/* 5) 평가항목 설정 (items) */}
-          {section === 'items' && (
-            <div className="space-y-4">
-              {/* 항목 템플릿 대그룹 전환 */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setTemplate('open')}
-                  className={`py-3 px-5 rounded-[10px] cursor-pointer text-[14px] font-bold border transition-all ${template === 'open'
-                      ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
-                      : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
-                    }`}
-                >
-                  오픈 테스트 평가항목 구성
-                </button>
-                <button
-                  onClick={() => setTemplate('blind')}
-                  className={`py-3 px-5 rounded-[10px] cursor-pointer text-[14px] font-bold border transition-all ${template === 'blind'
-                      ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
-                      : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
-                    }`}
-                >
-                  블라인드 테스트 평가항목 구성
-                </button>
-              </div>
+          {section === 'items' && (() => {
+            const activeTemplate = templates.find(t => t.id === activeTemplateId) || templates[0];
 
-              {/* 항목 리스트 카드 루프 */}
-              {templates[template].map((g, idx) => {
-                const rawTotal = g.items.reduce((sum, it) => sum + (Number(it.max) || 0), 0);
+            let activeTitle = "";
+            if (activeTemplate) {
+              if (activeTemplate.target_type === 'open_all') {
+                activeTitle = "오픈 테스트 공통 설정";
+              } else if (activeTemplate.target_type === 'blind_all') {
+                activeTitle = "블라인드 테스트 공통 설정";
+              } else {
+                const bm = bumans.find(b => b.prefix === activeTemplate.target_id);
+                activeTitle = `[${activeTemplate.target_id}] ${bm ? bm.name : ''} 부문 개별 설정`;
+              }
+            }
 
-                return (
-                  <div key={`${g.id || idx}-${g.name}`} className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[1000px] shadow-sm">
-                    {/* 카드 헤더 */}
-                    <div
-                      className="p-4 px-5 border-b border-[#e5e9f0] flex items-center gap-4 flex-wrap"
-                      style={{ backgroundColor: idx % 2 === 1 ? '#f5f7ec' : '#f4f7fb' }}
-                    >
-                      <div className="flex-1 min-w-[200px]">
-                        <div className="text-[11px] font-bold tracking-[1px] text-[#8b97ab] uppercase">
-                          항목 그룹명
-                        </div>
-                        <input
-                          type="text"
-                          value={g.name}
-                          onChange={(e) => {
-                            const list = templates[template];
-                            const next = list.map(x => x.id === g.id ? { ...x, name: e.target.value } : x);
-                            setTemplates({ ...templates, [template]: next });
-                          }}
-                          className="mt-1 w-[280px] max-w-full h-10 border border-[#dde3ec] rounded-lg px-3 text-[16px] font-extrabold text-[#1b2a4a] bg-white focus:outline-none"
-                        />
-                      </div>
+            return (
+              <div className="grid grid-cols-[280px_1fr] gap-6 items-start max-w-[1300px]">
+                {/* 좌측 패널: 평가 구성 대상 목록 */}
+                <div className="bg-white border border-[#e5e9f0] rounded-[14px] p-4 shadow-sm space-y-4">
+                  <div className="text-[13px] font-bold text-primary tracking-wide border-b border-[#eef1f6] pb-2 uppercase">
+                    평가 구성 목록 (타깃)
+                  </div>
+                  
+                  <div className="space-y-2.5 max-h-[460px] overflow-auto pr-1">
+                    {templates.map((t, idx) => {
+                      const isActive = activeTemplate && t.id === activeTemplate.id;
+                      let titleText = "";
+                      let subText = "";
+                      if (t.target_type === 'open_all') {
+                        titleText = "오픈 테스트 공통";
+                        subText = "기본 오픈 부문 적용";
+                      } else if (t.target_type === 'blind_all') {
+                        titleText = "블라인드 테스트 공통";
+                        subText = "기본 블라인드 부문 적용";
+                      } else {
+                        const bm = bumans.find(b => b.prefix === t.target_id);
+                        titleText = `[${t.target_id}] ${bm ? bm.name : ''} 전용`;
+                        subText = "부문별 개별 오버라이드";
+                      }
 
-                      <div className="text-right">
-                        <div className="text-[11px] font-bold tracking-[1px] text-[#8b97ab] uppercase">
-                          그룹 배점 합계
+                      return (
+                        <div
+                          key={t.id || idx}
+                          onClick={() => setActiveTemplateId(t.id)}
+                          className={`relative p-3.5 rounded-xl border cursor-pointer transition-all select-none ${
+                            isActive
+                              ? 'border-primary bg-primary/5 text-primary font-bold shadow-sm'
+                              : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="text-[14px]">{titleText}</div>
+                          <div className="text-[11px] text-[#8b97ab] mt-1 font-semibold">{subText}</div>
+                          
+                          {/* 개별 설정 카드 삭제 버튼 */}
+                          {t.target_type !== 'open_all' && t.target_type !== 'blind_all' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`[${titleText}] 평가 설정을 완전히 제거하시겠습니까?`)) {
+                                  handleDeleteTemplate(t.id);
+                                }
+                              }}
+                              className="absolute top-2.5 right-2.5 text-gray-400 hover:text-red-600 text-[18px] font-extrabold cursor-pointer transition-all leading-none"
+                              title="설정 제거"
+                            >
+                              ×
+                            </button>
+                          )}
                         </div>
-                        <div className="mt-1 text-[22px] font-extrabold text-[#1b2a4a] leading-none">
-                          {rawTotal}점
-                        </div>
-                      </div>
+                      );
+                    })}
+                  </div>
 
-                      <div className="text-right pl-4 border-l border-[#dde3ec]">
-                        <div className="text-[11px] font-bold tracking-[1px] text-[#8b97ab] uppercase">
-                          환산 점수 배점
-                        </div>
-                        <div className="mt-1 flex items-center gap-1.5 justify-end">
-                          <input
-                            type="text"
-                            value={g.convertTo}
+                  {/* 평가 구성 추가 버튼 폼 */}
+                  <div className="border-t border-[#eef1f6] pt-3">
+                    {showAddTemplateForm ? (
+                      <div className="p-3 bg-[#f8fafc] border border-[#e5e9f0] rounded-xl space-y-3">
+                        <div>
+                          <label className="text-[11px] font-extrabold text-[#8b97ab] block mb-1">적용 대상 타입</label>
+                          <select
+                            value={newTemplateTargetType}
                             onChange={(e) => {
-                              const list = templates[template];
-                              const next = list.map(x => x.id === g.id ? { ...x, convertTo: e.target.value.trim() === '' ? '' : Number(e.target.value) || 0 } : x);
-                              setTemplates({ ...templates, [template]: next });
+                              const val = e.target.value;
+                              setNewTemplateTargetType(val);
+                              if (val === 'specific_buman') {
+                                const availBumans = bumans.filter(b => b.prefix);
+                                setNewTemplateTargetId(availBumans[0] ? availBumans[0].prefix : '');
+                              } else {
+                                setNewTemplateTargetId('');
+                              }
                             }}
-                            placeholder="—"
-                            className="w-[70px] h-[38px] border border-[#dde3ec] rounded-lg text-center font-extrabold text-[16px] text-[#b58a2e] bg-white"
-                          />
-                          <span className="text-[13px] text-[#8b97ab] font-bold">점</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 카드 본문 리스트 */}
-                    <div className="grid grid-cols-[1.4fr_90px_1.8fr_60px] bg-[#fafbfd] border-b border-[#eef1f6] text-[12px] font-extrabold text-[#5a6a82]">
-                      <div className="py-2.5 px-4">평가 세부 항목</div>
-                      <div className="py-2.5 px-3 text-center">배점</div>
-                      <div className="py-2.5 px-4">5단계 척도 매핑 내역</div>
-                      <div className="py-2.5 text-center">삭제</div>
-                    </div>
-
-                    {g.items.map((it) => (
-                      <div key={it.id} className="grid grid-cols-[1.4fr_90px_1.8fr_60px] border-b border-[#f2f4f8] align-center items-center last:border-b-0">
-                        <div className="py-1.5 px-3">
-                          <input
-                            type="text"
-                            value={it.name}
-                            onChange={(e) => {
-                              const list = templates[template];
-                              const next = list.map(x => {
-                                if (x.id !== g.id) return x;
-                                return {
-                                  ...x,
-                                  items: x.items.map(s => s.id === it.id ? { ...s, name: e.target.value } : s)
-                                };
-                              });
-                              setTemplates({ ...templates, [template]: next });
-                            }}
-                            className="w-full h-[38px] border border-[#dde3ec] rounded-lg px-3 text-[14px] font-semibold text-primary"
-                          />
-                        </div>
-                        <div className="py-1.5 px-2">
-                          <input
-                            type="text"
-                            value={it.max}
-                            onChange={(e) => {
-                              const list = templates[template];
-                              const next = list.map(x => {
-                                if (x.id !== g.id) return x;
-                                return {
-                                  ...x,
-                                  items: x.items.map(s => s.id === it.id ? { ...s, max: e.target.value.replace(/[^0-9]/g, '') } : s)
-                                };
-                              });
-                              setTemplates({ ...templates, [template]: next });
-                            }}
-                            className="w-full h-[38px] border border-[#dde3ec] rounded-lg text-center font-extrabold text-[15px] text-[#b58a2e]"
-                          />
-                        </div>
-                        <div className="py-1.5 px-3">
-                          <span className="inline-block bg-[#f4f6fa] border border-[#e5e9f0] rounded-lg py-2 px-3.5 text-[14px] font-bold text-textSub tracking-[1px] leading-none">
-                            {scaleOf(it.max).join(' · ')}
-                          </span>
-                        </div>
-                        <div className="py-1.5 text-center">
-                          <button
-                            onClick={() => handleDeleteSingleItem(g.id, it.id)}
-                            className="w-[34px] h-[34px] border border-red-200 bg-white hover:bg-red-50 text-[#c0392b] rounded-lg text-[15px] font-extrabold cursor-pointer transition-all"
+                            className="w-full h-9 border border-[#dde3ec] rounded-lg px-2 text-[13px] bg-white text-primary"
                           >
-                            ×
+                            <option value="open_all">오픈 테스트 전체 공통</option>
+                            <option value="blind_all">블라인드 테스트 전체 공통</option>
+                            <option value="specific_buman">특정 부문 개별 설정</option>
+                          </select>
+                        </div>
+
+                        {newTemplateTargetType === 'specific_buman' && (
+                          <div>
+                            <label className="text-[11px] font-extrabold text-[#8b97ab] block mb-1">적용 부문 선택</label>
+                            <select
+                              value={newTemplateTargetId}
+                              onChange={(e) => setNewTemplateTargetId(e.target.value)}
+                              className="w-full h-9 border border-[#dde3ec] rounded-lg px-2 text-[13px] bg-white text-primary"
+                            >
+                              {bumans.filter(b => b.prefix).map(b => (
+                                <option key={b.id} value={b.prefix}>[{b.prefix}] {b.name} ({b.cat === 'blind' ? '블라인드' : '오픈'})</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => setShowAddTemplateForm(false)}
+                            className="h-8 px-3 rounded-lg border border-gray-300 text-[12px] bg-white cursor-pointer hover:bg-gray-50 transition-all font-semibold"
+                          >
+                            취소
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleAddTemplate(
+                                newTemplateTargetType,
+                                newTemplateTargetType === 'specific_buman' ? newTemplateTargetId : null
+                              );
+                              setShowAddTemplateForm(false);
+                            }}
+                            className="h-8 px-3 rounded-lg bg-primary text-white text-[12px] cursor-pointer hover:bg-primary-hover transition-all font-bold"
+                          >
+                            추가
                           </button>
                         </div>
                       </div>
-                    ))}
-
-                    <div className="p-3">
+                    ) : (
                       <button
-                        onClick={() => handleAddSingleItem(g.id)}
-                        className="w-full h-[42px] border-[1.5px] border-dashed border-[#c3ccdb] bg-white text-[#3a475c] rounded-[9px] text-[13px] font-bold cursor-pointer hover:bg-[#f8fafc] transition-all"
+                        onClick={() => {
+                          setShowAddTemplateForm(true);
+                          setNewTemplateTargetType('specific_buman');
+                          const availBumans = bumans.filter(b => b.prefix);
+                          setNewTemplateTargetId(availBumans[0] ? availBumans[0].prefix : '');
+                        }}
+                        className="w-full h-10 border border-dashed border-[#c3ccdb] bg-white text-[#3a475c] hover:bg-[#f8fafc] rounded-xl text-[13px] font-bold cursor-pointer transition-all flex items-center justify-center gap-1"
                       >
-                        + 항목 추가
+                        + 평가 구성 추가
                       </button>
-                    </div>
+                    )}
                   </div>
-                );
-              })}
+                </div>
 
-              <button
-                onClick={handleAddItemGroup}
-                className="h-[46px] px-6 border border-[#cbd3e1] bg-white text-textSub rounded-[10px] text-[14px] font-bold cursor-pointer hover:bg-gray-50 transition-all"
-              >
-                + 새 항목 그룹 생성
-              </button>
+                {/* 우측 패널: 선택된 평가 구성의 세부 그룹/항목 설정 보드 */}
+                <div className="space-y-4">
+                  {activeTemplate ? (
+                    <>
+                      {/* 상세 템플릿 헤더 정보 */}
+                      <div className="bg-white border border-[#e5e9f0] rounded-[14px] p-4 px-5 shadow-sm flex items-center justify-between flex-wrap gap-4">
+                        <div>
+                          <div className="text-[11px] font-bold tracking-[1.5px] text-[#8b97ab] uppercase">
+                            선택된 평가 대상 설정
+                          </div>
+                          <div className="text-[20px] font-extrabold text-[#1b2a4a] mt-1">
+                            {activeTitle}
+                          </div>
+                        </div>
 
-              <div className="text-[12px] text-[#8b97ab] leading-relaxed max-w-[1000px]">
-                ※ 5단계 척도는 배점을 5등분하여 자동 생성됩니다. 환산 점수를 비워둘 경우 원점수 그대로 총점에 합산되어 평가가 반영됩니다.
+                        <button
+                          onClick={handleAddItemGroup}
+                          className="h-[42px] px-4 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-bold cursor-pointer transition-all flex items-center gap-1.5"
+                        >
+                          + 평가 그룹 추가
+                        </button>
+                      </div>
+
+                      {/* 평가 세부 그룹 리스트 카드 루프 */}
+                      {activeTemplate.groups.map((g, idx) => {
+                        const rawTotal = g.items.reduce((sum, it) => sum + (Number(it.max) || 0), 0);
+
+                        return (
+                          <div key={g.id} className="relative bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden shadow-sm">
+                            {/* 평가 그룹 카드 삭제 버튼 */}
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`[${g.name || '신규 평가 항목군'}] 평가 그룹 카드를 완전히 삭제하시겠습니까?\n내부의 모든 세부 항목 배점이 제거됩니다.`)) {
+                                  handleDeleteItemGroup(g.id);
+                                }
+                              }}
+                              className="absolute top-3 right-3 text-gray-400 hover:text-red-600 text-[18px] font-extrabold cursor-pointer z-10 transition-all leading-none"
+                              title="그룹 카드 삭제"
+                            >
+                              ×
+                            </button>
+
+                            {/* 카드 헤더 */}
+                            <div
+                              className="p-4 px-5 border-b border-[#e5e9f0] flex items-center gap-6 flex-wrap pr-12"
+                              style={{ backgroundColor: idx % 2 === 1 ? '#f5f7ec' : '#f4f7fb' }}
+                            >
+                              <div className="flex-1 min-w-[200px]">
+                                <div className="text-[11px] font-bold tracking-[1px] text-[#8b97ab] uppercase">
+                                  항목 그룹명
+                                </div>
+                                <input
+                                  type="text"
+                                  value={g.name}
+                                  onChange={(e) => {
+                                    const next = templates.map(t => {
+                                      if (t.id !== activeTemplate.id) return t;
+                                      return {
+                                        ...t,
+                                        groups: t.groups.map(x => x.id === g.id ? { ...x, name: e.target.value } : x)
+                                      };
+                                    });
+                                    setTemplates(next);
+                                    saveState({ templates: next });
+                                  }}
+                                  className="mt-1 w-[280px] max-w-full h-10 border border-[#dde3ec] rounded-lg px-3 text-[16px] font-extrabold text-[#1b2a4a] bg-white focus:outline-none"
+                                />
+                              </div>
+
+                              <div className="text-right">
+                                <div className="text-[11px] font-bold tracking-[1px] text-[#8b97ab] uppercase">
+                                  그룹 배점 합계
+                                </div>
+                                <div className="mt-1 text-[22px] font-extrabold text-[#1b2a4a] leading-none">
+                                  {rawTotal}점
+                                </div>
+                              </div>
+
+                              <div className="text-right pl-4 border-l border-[#dde3ec]">
+                                <div className="text-[11px] font-bold tracking-[1px] text-[#8b97ab] uppercase">
+                                  환산 점수 배점
+                                </div>
+                                <div className="mt-1 flex items-center gap-1.5 justify-end">
+                                  <input
+                                    type="text"
+                                    value={g.convertTo}
+                                    onChange={(e) => {
+                                      const next = templates.map(t => {
+                                        if (t.id !== activeTemplate.id) return t;
+                                        return {
+                                          ...t,
+                                          groups: t.groups.map(x => x.id === g.id ? { ...x, convertTo: e.target.value.trim() === '' ? '' : Number(e.target.value) || 0 } : x)
+                                        };
+                                      });
+                                      setTemplates(next);
+                                      saveState({ templates: next });
+                                    }}
+                                    placeholder="—"
+                                    className="w-[70px] h-[38px] border border-[#dde3ec] rounded-lg text-center font-extrabold text-[16px] text-[#b58a2e] bg-white"
+                                  />
+                                  <span className="text-[13px] text-[#8b97ab] font-bold">점</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 카드 본문 리스트 */}
+                            <div className="grid grid-cols-[1.4fr_90px_1.8fr_60px] bg-[#fafbfd] border-b border-[#eef1f6] text-[12px] font-extrabold text-[#5a6a82]">
+                              <div className="py-2.5 px-4">평가 세부 항목</div>
+                              <div className="py-2.5 px-3 text-center">배점</div>
+                              <div className="py-2.5 px-4">5단계 척도 매핑 내역</div>
+                              <div className="py-2.5 text-center">삭제</div>
+                            </div>
+
+                            {g.items.map((it) => (
+                              <div key={it.id} className="grid grid-cols-[1.4fr_90px_1.8fr_60px] border-b border-[#f2f4f8] align-center items-center last:border-b-0">
+                                <div className="py-1.5 px-3">
+                                  <input
+                                    type="text"
+                                    value={it.name}
+                                    onChange={(e) => {
+                                      const next = templates.map(t => {
+                                        if (t.id !== activeTemplate.id) return t;
+                                        return {
+                                          ...t,
+                                          groups: t.groups.map(x => {
+                                            if (x.id !== g.id) return x;
+                                            return {
+                                              ...x,
+                                              items: x.items.map(s => s.id === it.id ? { ...s, name: e.target.value } : s)
+                                            };
+                                          })
+                                        };
+                                      });
+                                      setTemplates(next);
+                                      saveState({ templates: next });
+                                    }}
+                                    className="w-full h-[38px] border border-[#dde3ec] rounded-lg px-3 text-[14px] font-semibold text-primary"
+                                  />
+                                </div>
+                                <div className="py-1.5 px-2">
+                                  <input
+                                    type="text"
+                                    value={it.max}
+                                    onChange={(e) => {
+                                      const next = templates.map(t => {
+                                        if (t.id !== activeTemplate.id) return t;
+                                        return {
+                                          ...t,
+                                          groups: t.groups.map(x => {
+                                            if (x.id !== g.id) return x;
+                                            return {
+                                              ...x,
+                                              items: x.items.map(s => s.id === it.id ? { ...s, max: e.target.value.replace(/[^0-9]/g, '') } : s)
+                                            };
+                                          })
+                                        };
+                                      });
+                                      setTemplates(next);
+                                      saveState({ templates: next });
+                                    }}
+                                    className="w-full h-[38px] border border-[#dde3ec] rounded-lg text-center font-extrabold text-[15px] text-[#b58a2e]"
+                                  />
+                                </div>
+                                <div className="py-1.5 px-3">
+                                  <span className="inline-block bg-[#f4f6fa] border border-[#e5e9f0] rounded-lg py-2 px-3.5 text-[14px] font-bold text-textSub tracking-[1px] leading-none">
+                                    {scaleOf(it.max).join(' · ')}
+                                  </span>
+                                </div>
+                                <div className="py-1.5 text-center">
+                                  <button
+                                    onClick={() => handleDeleteSingleItem(g.id, it.id)}
+                                    className="w-[34px] h-[34px] border border-red-200 bg-white hover:bg-red-50 text-[#c0392b] rounded-lg text-[15px] font-extrabold cursor-pointer transition-all"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+
+                            <div className="p-3">
+                              <button
+                                onClick={() => handleAddSingleItem(g.id)}
+                                className="w-full h-[42px] border-[1.5px] border-dashed border-[#c3ccdb] bg-white text-[#3a475c] rounded-[9px] text-[13px] font-bold cursor-pointer hover:bg-[#f8fafc] transition-all"
+                              >
+                                + 항목 추가
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <div className="bg-white border border-[#e5e9f0] rounded-[14px] p-10 text-center text-gray-400 font-semibold shadow-sm">
+                      좌측 리스트에서 관리할 평가 대상을 고르거나 새로 추가해 주세요.
+                    </div>
+                  )}
+
+                  <div className="text-[12px] text-[#8b97ab] leading-relaxed max-w-[1000px] pt-2">
+                    ※ 5단계 척도는 배점을 5등분하여 자동 생성됩니다. 환산 점수를 비워둘 경우 원점수 그대로 총점에 합산되어 평가가 반영됩니다.
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 6) 결과 집계 (results) */}
           {section === 'results' && (

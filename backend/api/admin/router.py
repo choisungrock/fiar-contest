@@ -139,9 +139,13 @@ class EvalGroup(BaseModel):
     convertTo: str = ""
     items: list[EvalItem]
 
-class TemplatesMap(BaseModel):
-    open: list[EvalGroup]
-    blind: list[EvalGroup]
+from typing import Union
+
+class EvaluationTemplateItem(BaseModel):
+    id: int = None
+    target_type: str
+    target_id: Union[int, str, None] = None
+    groups: list[EvalGroup]
 
 class SaveDetailsRequest(BaseModel):
     systemName: str
@@ -150,7 +154,7 @@ class SaveDetailsRequest(BaseModel):
     judges: list[JudgeItem]
     bumans: list[BumanItem]
     products: dict[str, list[ProductItem]]
-    templates: TemplatesMap
+    templates: list[EvaluationTemplateItem]
 
 @router.get("/groups/{fg_id}/details")
 def get_group_details(fg_id: int):
@@ -217,113 +221,105 @@ def get_group_details(fg_id: int):
                 products_map[prefix] = prod_list
 
             # 평가항목 템플릿
-            templates_map = {"open": [], "blind": []}
+            res_templates = conn.execute(
+                text("SELECT fet_id, fet_target_type, fet_target_id FROM fair_evaluation_template WHERE fet_fg_id = :fg_id ORDER BY fet_id ASC"),
+                {"fg_id": fg_id}
+            )
+            templates_list = []
+            for t in res_templates:
+                fet_id, target_type, target_id = t
+                
+                # 해당 템플릿의 세부 항목 조회
+                res_items = conn.execute(
+                    text("SELECT fei_id, fei_group_name, fei_name, fei_max_score, fei_convert_to FROM fair_evaluation_item WHERE fei_fet_id = :fet_id ORDER BY fei_id ASC"),
+                    {"fet_id": fet_id}
+                )
+                
+                # group_name 기준으로 그룹화
+                group_map = {}
+                g_seq = 10000
+                for ri in res_items:
+                    fei_id, group_name, name, max_score, convert_to = ri
+                    if group_name not in group_map:
+                        g_seq += 1
+                        group_map[group_name] = {
+                            "id": g_seq,
+                            "name": group_name,
+                            "convertTo": str(convert_to) if convert_to is not None else "",
+                            "items": []
+                        }
+                    group_map[group_name]["items"].append({
+                        "id": fei_id,
+                        "name": name,
+                        "max": max_score
+                    })
+                
+                # target_id는 specific_buman일 경우 prefix 문자열로 프론트엔드가 수월하게 매핑할 수 있게 돌려줍니다!
+                fe_target_val = target_id
+                if target_type == 'specific_buman' and target_id is not None:
+                    # bumans_list 에서 id 매칭하여 prefix 추출
+                    found_prefix = next((b["prefix"] for b in bumans_list if b["id"] == target_id), None)
+                    if found_prefix:
+                        fe_target_val = found_prefix
+
+                templates_list.append({
+                    "id": fet_id,
+                    "target_type": target_type,
+                    "target_id": fe_target_val,
+                    "groups": list(group_map.values())
+                })
             
-            # 오픈 방식 대표 평가 항목 세트 추출
-            open_fb_id = next((b["id"] for b in bumans_list if b["type"] == "open"), None)
-            if open_fb_id:
-                res_groups = conn.execute(
-                    text("SELECT DISTINCT fei_group_name FROM fair_evaluation_item WHERE fei_fb_id = :fb_id"),
-                    {"fb_id": open_fb_id}
-                )
-                g_seq = 1000
-                for rg in res_groups:
-                    g_name = rg[0]
-                    g_seq += 1
-                    res_items = conn.execute(
-                        text("SELECT fei_id, fei_name, fei_max_score, fei_convert_to FROM fair_evaluation_item WHERE fei_fb_id = :fb_id AND fei_group_name = :g_name ORDER BY fei_id ASC"),
-                        {"fb_id": open_fb_id, "g_name": g_name}
-                    )
-                    items_list = []
-                    convert_val = ""
-                    for ri in res_items:
-                        items_list.append({
-                            "id": ri[0],
-                            "name": ri[1],
-                            "max": ri[2]
-                        })
-                        if ri[3] is not None:
-                            convert_val = str(ri[3])
-                    templates_map["open"].append({
-                        "id": g_seq,
-                        "name": g_name,
-                        "convertTo": convert_val,
-                        "items": items_list
-                    })
-
-            # 블라인드 방식 대표 평가 항목 세트 추출
-            blind_fb_id = next((b["id"] for b in bumans_list if b["type"] == "blind"), None)
-            if blind_fb_id:
-                res_groups = conn.execute(
-                    text("SELECT DISTINCT fei_group_name FROM fair_evaluation_item WHERE fei_fb_id = :fb_id"),
-                    {"fb_id": blind_fb_id}
-                )
-                g_seq = 2000
-                for rg in res_groups:
-                    g_name = rg[0]
-                    g_seq += 1
-                    res_items = conn.execute(
-                        text("SELECT fei_id, fei_name, fei_max_score, fei_convert_to FROM fair_evaluation_item WHERE fei_fb_id = :fb_id AND fei_group_name = :g_name ORDER BY fei_id ASC"),
-                        {"fb_id": blind_fb_id, "g_name": g_name}
-                    )
-                    items_list = []
-                    convert_val = ""
-                    for ri in res_items:
-                        items_list.append({
-                            "id": ri[0],
-                            "name": ri[1],
-                            "max": ri[2]
-                        })
-                        if ri[3] is not None:
-                            convert_val = str(ri[3])
-                    templates_map["blind"].append({
-                        "id": g_seq,
-                        "name": g_name,
-                        "convertTo": convert_val,
-                        "items": items_list
-                    })
-
             # 비어있을 시 디폴트 템플릿 구조 로딩
-            if not templates_map["open"] and not templates_map["blind"]:
-                templates_map = {
-                    "open": [
-                        {
-                            "id": 1,
-                            "name": "관능평가",
-                            "convertTo": "70",
-                            "items": [
-                                { "id": 1, "name": "식품의 색", "max": 15 },
-                                { "id": 2, "name": "식품의 향", "max": 15 },
-                                { "id": 3, "name": "식품의 맛", "max": 30 },
-                                { "id": 4, "name": "식품의 식감", "max": 20 },
-                                { "id": 5, "name": "종합평가", "max": 20 }
-                            ]
-                        },
-                        {
-                            "id": 2,
-                            "name": "상품성평가",
-                            "convertTo": "",
-                            "items": [
-                                { "id": 6, "name": "창의성", "max": 30 },
-                                { "id": 7, "name": "디자인", "max": 20 }
-                            ]
-                        }
-                    ],
-                    "blind": [
-                        {
-                            "id": 3,
-                            "name": "관능평가",
-                            "convertTo": "",
-                            "items": [
-                                { "id": 8, "name": "술의 색", "max": 20 },
-                                { "id": 9, "name": "술의 향", "max": 20 },
-                                { "id": 10, "name": "술의 맛", "max": 30 },
-                                { "id": 11, "name": "후미 및 목넘김", "max": 20 },
-                                { "id": 12, "name": "종합평가", "max": 30 }
-                            ]
-                        }
-                    ]
-                }
+            if not templates_list:
+                templates_list = [
+                    {
+                        "id": 1001,
+                        "target_type": "open_all",
+                        "target_id": None,
+                        "groups": [
+                            {
+                                "id": 101,
+                                "name": "관능평가",
+                                "convertTo": "70",
+                                "items": [
+                                    {"id": 1, "name": "식품의 색", "max": 15},
+                                    {"id": 2, "name": "식품의 향", "max": 15},
+                                    {"id": 3, "name": "식품의 맛", "max": 30},
+                                    {"id": 4, "name": "식품의 식감", "max": 20},
+                                    {"id": 5, "name": "종합평가", "max": 20}
+                                ]
+                            },
+                            {
+                                "id": 102,
+                                "name": "상품성평가",
+                                "convertTo": "",
+                                "items": [
+                                    {"id": 6, "name": "창의성", "max": 30},
+                                    {"id": 7, "name": "디자인", "max": 20}
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": 1002,
+                        "target_type": "blind_all",
+                        "target_id": None,
+                        "groups": [
+                            {
+                                "id": 201,
+                                "name": "관능평가",
+                                "convertTo": "",
+                                "items": [
+                                    {"id": 8, "name": "술의 색", "max": 20},
+                                    {"id": 9, "name": "술의 향", "max": 20},
+                                    {"id": 10, "name": "술의 맛", "max": 30},
+                                    {"id": 11, "name": "후미 및 목넘김", "max": 20},
+                                    {"id": 12, "name": "종합평가", "max": 30}
+                                ]
+                            }
+                        ]
+                    }
+                ]
 
             return {
                 "status": "success",
@@ -333,7 +329,7 @@ def get_group_details(fg_id: int):
                 "judges": judges_list,
                 "bumans": bumans_list,
                 "products": products_map,
-                "templates": templates_map
+                "templates": templates_list
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"상세 정보 조회 중 오류 발생: {str(e)}")
@@ -384,41 +380,41 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest):
                                 {"fb_id": fb_id, "code": p.code, "name": p.name}
                             )
 
-                # 6. 평가항목 기입
-                # open
-                for g in req.templates.open:
-                    fb_id = g.id
-                    if fb_id not in prefix_to_fb_id.values():
-                        open_fb_ids = [prefix_to_fb_id[bm.prefix] for bm in req.bumans if bm.type == 'open']
-                        fb_id = open_fb_ids[0] if open_fb_ids else None
+                # 6. 기존 평가 템플릿 삭제 (종속 항목인 fair_evaluation_item은 ON DELETE CASCADE에 의해 같이 삭제됨)
+                conn.execute(text("DELETE FROM fair_evaluation_template WHERE fet_fg_id = :fg_id"), {"fg_id": fg_id})
+
+                # 7. 신규 평가 템플릿 기입
+                for t in req.templates:
+                    db_target_id = None
+                    if t.target_type == 'specific_buman':
+                        if t.target_id is not None:
+                            # prefix 문자열로 lookup 시도
+                            db_target_id = prefix_to_fb_id.get(str(t.target_id))
+                            if not db_target_id:
+                                # 기존 정수 ID 등으로 matching 시도
+                                for bm in req.bumans:
+                                    if bm.id == t.target_id or bm.prefix == t.target_id:
+                                        db_target_id = prefix_to_fb_id.get(bm.prefix)
+                                        break
                     
-                    if fb_id:
+                    conn.execute(
+                        text("INSERT INTO fair_evaluation_template (fet_fg_id, fet_target_type, fet_target_id) VALUES (:fg_id, :target_type, :target_id)"),
+                        {"fg_id": fg_id, "target_type": t.target_type, "target_id": db_target_id}
+                    )
+                    inserted_fet_id = conn.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+
+                    for g in t.groups:
+                        conv_val = int(g.convertTo) if g.convertTo and g.convertTo.isdigit() else None
                         for item in g.items:
-                            conv_val = int(g.convertTo) if g.convertTo and g.convertTo.isdigit() else None
                             conn.execute(
-                                text("INSERT INTO fair_evaluation_item (fei_fb_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES (:fb_id, :g_name, :name, :max, :conv)"),
-                                {"fb_id": fb_id, "g_name": g.name, "name": item.name, "max": item.max, "conv": conv_val}
-                            )
-                
-                # blind
-                for g in req.templates.blind:
-                    fb_id = g.id
-                    if fb_id not in prefix_to_fb_id.values():
-                        blind_fb_ids = [prefix_to_fb_id[bm.prefix] for bm in req.bumans if bm.type == 'blind']
-                        fb_id = blind_fb_ids[0] if blind_fb_ids else None
-                    
-                    if fb_id:
-                        for item in g.items:
-                            conv_val = int(g.convertTo) if g.convertTo and g.convertTo.isdigit() else None
-                            conn.execute(
-                                text("INSERT INTO fair_evaluation_item (fei_fb_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES (:fb_id, :g_name, :name, :max, :conv)"),
-                                {"fb_id": fb_id, "g_name": g.name, "name": item.name, "max": item.max, "conv": conv_val}
+                                text("INSERT INTO fair_evaluation_item (fei_fet_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES (:fet_id, :g_name, :name, :max, :conv)"),
+                                {"fet_id": inserted_fet_id, "g_name": g.name, "name": item.name, "max": item.max, "conv": conv_val}
                             )
 
                 trans.commit()
                 return {
                     "status": "success",
-                    "message": "대그룹 상세 설정이 데이터베이스에 일괄 저장 및 반영되었습니다."
+                    "groupId": fg_id
                 }
             except Exception as inner_err:
                 trans.rollback()
