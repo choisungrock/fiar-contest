@@ -889,18 +889,30 @@ function App() {
                   평가 방식 정보
                 </div>
                 <div className="mt-3 flex gap-3 flex-wrap">
-                  <div className="flex-1 min-w-[200px] border border-green-200 bg-[#f2f7ea] rounded-[12px] p-4">
-                    <div className="text-[13px] font-bold text-brandGreen">오픈 테스트 방식</div>
-                    <div className="mt-1.5 text-[13px] text-[#6b7890] leading-relaxed">
-                      제품명과 분류코드가 모두 공개되어 평가가 진행됩니다. 관능 평가(100)와 상품성 평가(50)를 합산하여 최종 120점 점수로 소계 환산 산출합니다.
+                  {bumans.length === 0 ? (
+                    <div className="w-full border border-dashed border-[#c3ccdb] bg-[#f4f6fa] rounded-[12px] p-5 text-center text-[#8b97ab] font-bold text-[13px]">
+                      등록된 부문이 없으므로 평가 방식 정보가 "등록전"입니다.
                     </div>
-                  </div>
-                  <div className="flex-1 min-w-[200px] border border-blue-200 bg-[#eef4fb] rounded-[12px] p-4">
-                    <div className="text-[13px] font-bold text-brandBlue">블라인드 테스트 방식</div>
-                    <div className="mt-1.5 text-[13px] text-[#6b7890] leading-relaxed">
-                      제품명이 완전히 기밀로 부쳐지며 오직 난수형 분류코드만 노출됩니다. 5개 관능 평가 항목 합계를 그대로 120점 소계로 산출합니다.
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      {bumans.some(b => b.type === 'open') && (
+                        <div className="flex-1 min-w-[200px] border border-green-200 bg-[#f2f7ea] rounded-[12px] p-4">
+                          <div className="text-[13px] font-bold text-brandGreen">오픈 테스트 방식</div>
+                          <div className="mt-1.5 text-[13px] text-[#6b7890] leading-relaxed">
+                            제품명과 분류코드가 모두 공개되어 평가가 진행됩니다. 관능 평가(100)와 상품성 평가(50)를 합산하여 최종 120점 점수로 소계 환산 산출합니다.
+                          </div>
+                        </div>
+                      )}
+                      {bumans.some(b => b.type === 'blind') && (
+                        <div className="flex-1 min-w-[200px] border border-blue-200 bg-[#eef4fb] rounded-[12px] p-4">
+                          <div className="text-[13px] font-bold text-brandBlue">블라인드 테스트 방식</div>
+                          <div className="mt-1.5 text-[13px] text-[#6b7890] leading-relaxed">
+                            제품명이 완전히 기밀로 부쳐지며 오직 난수형 분류코드만 노출됩니다. 5개 관능 평가 항목 합계를 그대로 120점 소계로 산출합니다.
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
