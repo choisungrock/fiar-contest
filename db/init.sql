@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS fair_evaluation_item (
   fei_name VARCHAR(100) NOT NULL,
   fei_max_score INT NOT NULL,
   fei_convert_to INT,
+  fei_scale_values VARCHAR(255) NULL DEFAULT NULL,
   FOREIGN KEY (fei_fet_id) REFERENCES fair_evaluation_template(fet_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 

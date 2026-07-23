@@ -1,7 +1,7 @@
 # 관리자 기능 관련 API 요청을 처리하는 APIRouter 정의 파일
 import os
 from fastapi import APIRouter, HTTPException, status
-from typing import Union
+from typing import Union, Optional
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -133,6 +133,7 @@ class EvalItem(BaseModel):
     id: int = None
     name: str
     max: int
+    scaleValues: Optional[str] = None
 
 class EvalGroup(BaseModel):
     id: int = None
@@ -230,7 +231,7 @@ def get_group_details(fg_id: int):
                 
                 # 해당 템플릿의 세부 항목 조회
                 res_items = conn.execute(
-                    text("SELECT fei_id, fei_group_name, fei_name, fei_max_score, fei_convert_to FROM fair_evaluation_item WHERE fei_fet_id = :fet_id ORDER BY fei_id ASC"),
+                    text("SELECT fei_id, fei_group_name, fei_name, fei_max_score, fei_convert_to, fei_scale_values FROM fair_evaluation_item WHERE fei_fet_id = :fet_id ORDER BY fei_id ASC"),
                     {"fet_id": fet_id}
                 )
                 
@@ -238,7 +239,7 @@ def get_group_details(fg_id: int):
                 group_map = {}
                 g_seq = 10000
                 for ri in res_items:
-                    fei_id, group_name, name, max_score, convert_to = ri
+                    fei_id, group_name, name, max_score, convert_to, scale_values = ri
                     if group_name not in group_map:
                         g_seq += 1
                         group_map[group_name] = {
@@ -250,7 +251,8 @@ def get_group_details(fg_id: int):
                     group_map[group_name]["items"].append({
                         "id": fei_id,
                         "name": name,
-                        "max": max_score
+                        "max": max_score,
+                        "scaleValues": scale_values or None
                     })
                 
                 # target_id는 specific_buman일 경우 prefix 문자열로 프론트엔드가 수월하게 매핑할 수 있게 돌려줍니다!
@@ -362,8 +364,8 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest):
 
                         for item in g.items:
                             conn.execute(
-                                text("INSERT INTO fair_evaluation_item (fei_fet_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES (:fet_id, :g_name, :name, :max, :conv)"),
-                                {"fet_id": inserted_fet_id, "g_name": g.name, "name": item.name, "max": item.max, "conv": conv_val}
+                                text("INSERT INTO fair_evaluation_item (fei_fet_id, fei_group_name, fei_name, fei_max_score, fei_convert_to, fei_scale_values) VALUES (:fet_id, :g_name, :name, :max, :conv, :scale_val)"),
+                                {"fet_id": inserted_fet_id, "g_name": g.name, "name": item.name, "max": item.max, "conv": conv_val, "scale_val": item.scaleValues}
                             )
 
                 trans.commit()

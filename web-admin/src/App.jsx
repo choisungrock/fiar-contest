@@ -1666,15 +1666,15 @@ function App() {
                             </div>
 
                             {/* 카드 본문 리스트 */}
-                            <div className="grid grid-cols-[1.4fr_90px_1.8fr_60px] bg-[#fafbfd] border-b border-[#eef1f6] text-[12px] font-extrabold text-[#5a6a82]">
+                            <div className="grid grid-cols-[1.2fr_80px_2.2fr_56px] bg-[#fafbfd] border-b border-[#eef1f6] text-[12px] font-extrabold text-[#5a6a82]">
                               <div className="py-2.5 px-4">평가 세부 항목</div>
                               <div className="py-2.5 px-3 text-center">배점</div>
-                              <div className="py-2.5 px-4">5단계 척도 매핑 내역</div>
+                              <div className="py-2.5 px-4">척도 배점 매핑</div>
                               <div className="py-2.5 text-center">삭제</div>
                             </div>
 
                             {g.items.map((it) => (
-                              <div key={it.id} className="grid grid-cols-[1.4fr_90px_1.8fr_60px] border-b border-[#f2f4f8] align-center items-center last:border-b-0">
+                              <div key={it.id} className="grid grid-cols-[1.2fr_80px_2.2fr_56px] border-b border-[#f2f4f8] align-center items-center last:border-b-0">
                                 <div className="py-1.5 px-3">
                                   <input
                                     type="text"
@@ -1723,10 +1723,74 @@ function App() {
                                     className="w-full h-[38px] border border-[#dde3ec] rounded-lg text-center font-extrabold text-[15px] text-[#b58a2e]"
                                   />
                                 </div>
-                                <div className="py-1.5 px-3">
-                                  <span className="inline-block bg-[#f4f6fa] border border-[#e5e9f0] rounded-lg py-2 px-3.5 text-[14px] font-bold text-textSub tracking-[1px] leading-none">
-                                    {scaleOf(it.max).join(' · ')}
-                                  </span>
+                                <div className="py-1.5 px-3 flex flex-col gap-1">
+                                  {/* 단계 수 퀵 헬퍼 버튼 그룹 */}
+                                  <div className="flex gap-1 items-center">
+                                    {[3, 5, 7].map((steps) => {
+                                      const mVal = parseInt(it.max) || 0;
+                                      const stepSize = mVal / steps;
+                                      const calculatedStr = Array.from({ length: steps }, (_, i) => Math.round(stepSize * (i + 1))).join(', ');
+                                      const isMatched = it.scaleValues === calculatedStr || (!it.scaleValues && steps === 5);
+                                      
+                                      return (
+                                        <button
+                                          key={steps}
+                                          type="button"
+                                          onClick={() => {
+                                            const next = templates.map(t => {
+                                              if (t.id !== activeTemplate.id) return t;
+                                              return {
+                                                ...t,
+                                                groups: t.groups.map(x => {
+                                                  if (x.id !== g.id) return x;
+                                                  return {
+                                                    ...x,
+                                                    items: x.items.map(s => s.id === it.id ? { ...s, scaleValues: calculatedStr } : s)
+                                                  };
+                                                })
+                                              };
+                                            });
+                                            setTemplates(next);
+                                            saveState({ templates: next });
+                                          }}
+                                          className={`py-0.5 px-1.5 text-[10px] rounded border transition-all cursor-pointer font-extrabold ${isMatched 
+                                            ? 'bg-[#1b2a4a] border-[#1b2a4a] text-white' 
+                                            : 'bg-white border-[#cbd3e1] text-[#5a6a82] hover:bg-gray-50'}`}
+                                        >
+                                          {steps}단계
+                                        </button>
+                                      );
+                                    })}
+                                    
+                                    <span className="text-[10px] text-gray-400 font-semibold ml-1">
+                                      {it.scaleValues ? "커스텀 척도" : "자동 (5단계)"}
+                                    </span>
+                                  </div>
+
+                                  <input
+                                    type="text"
+                                    value={it.scaleValues || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const next = templates.map(t => {
+                                        if (t.id !== activeTemplate.id) return t;
+                                        return {
+                                          ...t,
+                                          groups: t.groups.map(x => {
+                                            if (x.id !== g.id) return x;
+                                            return {
+                                              ...x,
+                                              items: x.items.map(s => s.id === it.id ? { ...s, scaleValues: val } : s)
+                                            };
+                                          })
+                                        };
+                                      });
+                                      setTemplates(next);
+                                      saveState({ templates: next });
+                                    }}
+                                    placeholder={scaleOf(it.max).join(', ') + ' (쉼표로 척도 기입)'}
+                                    className="w-full h-[32px] border border-[#dde3ec] rounded-lg px-2 text-[12px] font-extrabold text-primary bg-white focus:border-[#1b2a4a] focus:outline-none"
+                                  />
                                 </div>
                                 <div className="py-1.5 text-center">
                                   <button
