@@ -53,11 +53,7 @@ function App() {
 
   // 2) 관리자 대시보드 및 상세 제어 상태
   const [view, setView] = useState('dashboard'); // dashboard | console
-  const [groups, setGroups] = useState([
-    { id: 1, name: '2026 우리쌀·우리술 K-라이스페스타 품평회', period: '2026.09.01 – 09.03', status: '진행중', progress: 62 },
-    { id: 2, name: '2025 전국 발효식품 품평회', period: '2025.11.10 – 11.12', status: '완료', progress: 100 },
-    { id: 3, name: '2026 지역특산 가공식품 경진대회', period: '2026.10.15 – 10.16', status: '준비중', progress: 0 },
-  ]);
+  const [groups, setGroups] = useState([]);
   const [activeGroup, setActiveGroup] = useState(1);
   const [section, setSection] = useState('overview');
   const [systemName, setSystemName] = useState('2026 우리쌀·우리술 K-라이스페스타 품평회');
@@ -145,12 +141,6 @@ function App() {
   // 컴포넌트 마운트 시 로컬스토리지 복구 및 세션 자동 로그인 체크
   useEffect(() => {
     try {
-      const defaultGroups = [
-        { id: 1, name: '2026 우리쌀·우리술 K-라이스페스타 품평회', period: '2026.09.01 – 09.03', status: '진행중', progress: 62 },
-        { id: 2, name: '2025 전국 발효식품 품평회', period: '2025.11.10 – 11.12', status: '완료', progress: 100 },
-        { id: 3, name: '2026 지역특산 가공식품 경진대회', period: '2026.10.15 – 10.16', status: '준비중', progress: 0 },
-      ];
-      setGroups(defaultGroups);
 
       const raw = localStorage.getItem('kricefesta_admin_v1');
       if (raw) {
