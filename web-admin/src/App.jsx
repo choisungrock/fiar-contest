@@ -387,6 +387,7 @@ function App() {
     const newBumans = [...bumans, {
       id: nextUid(),
       prefix: '',
+      group: '',
       cat: 'open',
       name: ''
     }];
@@ -1135,10 +1136,11 @@ function App() {
           {section === 'bumans' && (
             <div className="space-y-4">
               <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[980px] shadow-sm">
-                <div className="grid grid-cols-[56px_90px_130px_1.6fr_150px_80px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
+                <div className="grid grid-cols-[56px_90px_110px_1.1fr_1.4fr_120px_80px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
                   <div className="p-3 text-center">No.</div>
                   <div className="p-3">코드</div>
                   <div className="p-3">평가 방식</div>
+                  <div className="p-3">부문그룹</div>
                   <div className="p-3">부문명</div>
                   <div className="p-3">제품 수</div>
                   <div className="p-3 text-center">삭제</div>
@@ -1158,7 +1160,7 @@ function App() {
                       onDragOver={(e) => handleDragOver(e, idx)}
                       onDragEnd={handleDragEnd}
                       onDrop={(e) => handleDrop(e, idx)}
-                      className={`grid grid-cols-[56px_90px_130px_1.6fr_150px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0 transition-all select-none ${
+                      className={`grid grid-cols-[56px_90px_110px_1.1fr_1.4fr_120px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0 transition-all select-none ${
                         draggedIdx === idx ? 'opacity-40 bg-[#f4f6fa]/70 border-dashed border-primary/20' : 'bg-white'
                       }`}
                     >
@@ -1191,6 +1193,18 @@ function App() {
                           <option value="open">오픈</option>
                           <option value="blind">블라인드</option>
                         </select>
+                      </div>
+                      <div className="p-1.5">
+                        <input
+                          type="text"
+                          value={b.group || ''}
+                          onChange={(e) => {
+                            const next = bumans.map(x => x.id === b.id ? { ...x, group: e.target.value } : x);
+                            setBumans(next);
+                          }}
+                          placeholder="예) 쌀가공식품"
+                          className="w-full h-10 border border-[#dde3ec] rounded-lg px-3 text-[14px] font-semibold text-primary"
+                        />
                       </div>
                       <div className="p-1.5">
                         <input

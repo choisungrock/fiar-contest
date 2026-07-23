@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS fair_buman (
   fb_id INT AUTO_INCREMENT PRIMARY KEY,
   fb_fg_id INT NOT NULL,
   fb_prefix VARCHAR(10) NOT NULL,
+  fb_group VARCHAR(100) DEFAULT '',
   fb_name VARCHAR(100) NOT NULL,
   fb_type VARCHAR(20) NOT NULL,
   FOREIGN KEY (fb_fg_id) REFERENCES fair_group(fg_id) ON DELETE CASCADE
@@ -71,11 +72,11 @@ INSERT INTO fair_group (fg_id, fg_name, fg_period, fg_status) VALUES
 (1, '2026 우리쌀·우리술 K-라이스페스타 품평회', '2026.09.01 – 09.03', '진행중');
 
 -- 2. 부문
-INSERT INTO fair_buman (fb_id, fb_fg_id, fb_prefix, fb_name, fb_type) VALUES
-(1, 1, 'A', '조리', 'open'),
-(2, 1, 'B', '비조리', 'open'),
-(3, 1, '가', '저도발효주', 'blind'),
-(4, 1, '나', '고도발효주', 'blind');
+INSERT INTO fair_buman (fb_id, fb_fg_id, fb_prefix, fb_group, fb_name, fb_type) VALUES
+(1, 1, 'A', '쌀가공식품', '조리', 'open'),
+(2, 1, 'B', '쌀가공식품', '비조리', 'open'),
+(3, 1, '가', '우리술', '저도발효주', 'blind'),
+(4, 1, '나', '우리술', '고도발효주', 'blind');
 
 -- 3. 평가자 (심사위원)
 INSERT INTO fair_judge (fj_id, fj_fg_id, fj_name, fj_affiliation, fj_role) VALUES

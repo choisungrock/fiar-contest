@@ -118,6 +118,7 @@ class JudgeItem(BaseModel):
 class BumanItem(BaseModel):
     id: int = None
     prefix: str
+    group: str = ""
     name: str
     type: str = "open"
     cat: str = "open"
@@ -183,7 +184,7 @@ def get_group_details(fg_id: int):
 
             # 부문
             res_bumans = conn.execute(
-                text("SELECT fb_id, fb_prefix, fb_name, fb_type FROM fair_buman WHERE fb_fg_id = :fg_id ORDER BY fb_id ASC"),
+                text("SELECT fb_id, fb_prefix, fb_group, fb_name, fb_type FROM fair_buman WHERE fb_fg_id = :fg_id ORDER BY fb_id ASC"),
                 {"fg_id": fg_id}
             )
             bumans_list = []
@@ -192,9 +193,10 @@ def get_group_details(fg_id: int):
                 bumans_list.append({
                     "id": r[0],
                     "prefix": r[1],
-                    "name": r[2],
-                    "type": r[3],
-                    "cat": r[3]
+                    "group": r[2] or "",
+                    "name": r[3],
+                    "type": r[4],
+                    "cat": r[4]
                 })
                 buman_ids[r[1]] = r[0]
 
@@ -360,9 +362,10 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest):
                 prefix_to_fb_id = {}
                 for b in req.bumans:
                     b_type = b.type if b.type else (b.cat if b.cat else "open")
+                    b_group = b.group if b.group else ""
                     conn.execute(
-                        text("INSERT INTO fair_buman (fb_fg_id, fb_prefix, fb_name, fb_type) VALUES (:fg_id, :prefix, :name, :type)"),
-                        {"fg_id": fg_id, "prefix": b.prefix, "name": b.name, "type": b_type}
+                        text("INSERT INTO fair_buman (fb_fg_id, fb_prefix, fb_group, fb_name, fb_type) VALUES (:fg_id, :prefix, :group, :name, :type)"),
+                        {"fg_id": fg_id, "prefix": b.prefix, "group": b_group, "name": b.name, "type": b_type}
                     )
                     inserted_fb_id = conn.execute(text("SELECT LAST_INSERT_ID()")).scalar()
                     prefix_to_fb_id[b.prefix] = inserted_fb_id
