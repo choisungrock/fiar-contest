@@ -1,6 +1,7 @@
 # 관리자 기능 관련 API 요청을 처리하는 APIRouter 정의 파일
 import os
 from fastapi import APIRouter, HTTPException, status
+from typing import Union
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -138,8 +139,6 @@ class EvalGroup(BaseModel):
     name: str
     convertTo: Union[int, str, None] = ""
     items: list[EvalItem]
-
-from typing import Union
 
 class EvaluationTemplateItem(BaseModel):
     id: int = None
