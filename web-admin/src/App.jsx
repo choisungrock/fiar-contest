@@ -497,6 +497,7 @@ function App() {
     const dashStats = [
       { label: '전체 대그룹', value: groups.length + '개' },
       { label: '진행중', value: groups.filter(g => g.status === '진행중').length + '개' },
+      { label: '준비중', value: groups.filter(g => g.status === '준비중').length + '개' },
       { label: '완료', value: groups.filter(g => g.status === '완료').length + '개' },
     ];
 
@@ -553,7 +554,7 @@ function App() {
         <div style={{ flex: 1, overflow: 'auto', padding: '28px 40px 60px' }}>
           <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
             {dashStats.map((s, idx) => (
-              <div key={idx} style={{ flex: 1, minWidth: '180px', background: '#fff', border: '1px solid #e5e9f0', borderRadius: '14px', padding: '18px 22px' }}>
+              <div key={idx} style={{ flex: 1, minWidth: '140px', background: '#fff', border: '1px solid #e5e9f0', borderRadius: '14px', padding: '18px 22px' }}>
                 <div style={{ fontSize: '13px', color: '#8b97ab', fontWeight: 600 }}>{s.label}</div>
                 <div style={{ marginTop: '6px', fontSize: '30px', fontWeight: 800, color: '#1b2a4a' }}>{s.value}</div>
               </div>
