@@ -1133,17 +1133,23 @@ function App() {
                         />
                       </div>
                       <div className="p-1.5">
-                        <select
-                          value={b.cat}
-                          onChange={(e) => {
-                            const next = bumans.map(x => x.id === b.id ? { ...x, cat: e.target.value } : x);
-                            setBumans(next);
-                          }}
-                          className="w-full h-10 border border-[#dde3ec] rounded-lg px-2 text-[13px] font-semibold bg-white text-primary"
-                        >
-                          <option value="open">오픈</option>
-                          <option value="blind">블라인드</option>
-                        </select>
+                        <div className="relative flex items-center justify-center">
+                          <select
+                            value={b.cat || b.type || 'open'}
+                            onChange={(e) => {
+                              const next = bumans.map(x => x.id === b.id ? { ...x, cat: e.target.value, type: e.target.value } : x);
+                              setBumans(next);
+                            }}
+                            className={`w-full h-[32px] border-none rounded-full px-4 text-[12px] font-extrabold text-center cursor-pointer focus:outline-none appearance-none transition-all ${
+                              (b.cat === 'blind' || b.type === 'blind')
+                                ? 'bg-[#eef4fb] text-[#2f5488] border border-blue-100'
+                                : 'bg-[#f2f7ea] text-[#55821d] border border-green-100'
+                            }`}
+                          >
+                            <option value="open">오픈</option>
+                            <option value="blind">블라인드</option>
+                          </select>
+                        </div>
                       </div>
                       <div className="p-1.5">
                         <input
