@@ -1237,87 +1237,94 @@ function App() {
           )}
 
           {/* 4) 부문별 제품 (products) */}
-          {section === 'products' && (
-            <div className="space-y-4">
-              {/* 상단 부문 전환 탭 */}
-              <div className="flex gap-2 flex-wrap">
-                {bumans.filter(b => b.prefix).map((b) => {
-                  const active = b.prefix === productBuman;
-                  return (
-                    <button
-                      key={b.id}
-                      onClick={() => setProductBuman(b.prefix)}
-                      className={`flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] cursor-pointer text-[14px] border transition-all ${active
-                          ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
-                          : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
-                        }`}
-                    >
-                      <span className="font-extrabold">{b.prefix}</span>
-                      <span className="opacity-90 font-semibold">{b.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
+          {section === 'products' && (() => {
+            const activeBumanObject = bumans.find(b => b.prefix === productBuman);
+            const isBlind = activeBumanObject?.cat === 'blind' || activeBumanObject?.type === 'blind';
 
-              {/* 제품 제어 테이블 */}
-              <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[760px] shadow-sm">
-                <div className="grid grid-cols-[56px_160px_1.6fr_80px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
-                  <div className="p-3 text-center">No.</div>
-                  <div className="p-3">제품 분류코드</div>
-                  <div className="p-3">제품명</div>
-                  <div className="p-3 text-center">삭제</div>
+            return (
+              <div className="space-y-4">
+                {/* 상단 부문 전환 탭 */}
+                <div className="flex gap-2 flex-wrap">
+                  {bumans.filter(b => b.prefix).map((b) => {
+                    const active = b.prefix === productBuman;
+                    return (
+                      <button
+                        key={b.id}
+                        onClick={() => setProductBuman(b.prefix)}
+                        className={`flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] cursor-pointer text-[14px] border transition-all ${active
+                            ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
+                            : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
+                          }`}
+                      >
+                        <span className="font-extrabold">{b.prefix}</span>
+                        <span className="opacity-90 font-semibold">{b.name}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {(products[productBuman] || []).map((p, idx) => {
-                  return (
-                    <div key={p.id} className="grid grid-cols-[56px_160px_1.6fr_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0">
-                      <div className="p-3 text-center font-bold text-[#8b97ab]">{idx + 1}</div>
-                      <div className="p-1.5">
-                        <input
-                          type="text"
-                          value={p.code}
-                          onChange={(e) => {
-                            const next = (products[productBuman] || []).map(x => x.id === p.id ? { ...x, code: e.target.value } : x);
-                            setProducts({ ...products, [productBuman]: next });
-                          }}
-                          className="w-full h-10 border border-[#dde3ec] rounded-lg px-3 text-[15px] font-extrabold text-primary"
-                        />
-                      </div>
-                      <div className="p-1.5">
-                        <input
-                          type="text"
-                          value={p.name || ''}
-                          onChange={(e) => {
-                            const next = (products[productBuman] || []).map(x => x.id === p.id ? { ...x, name: e.target.value } : x);
-                            setProducts({ ...products, [productBuman]: next });
-                          }}
-                          placeholder="제품명 입력"
-                          className="w-full h-10 border border-[#dde3ec] bg-white font-semibold text-primary rounded-lg px-3 text-[14px]"
-                        />
-                      </div>
-                      <div className="p-1.5 text-center">
-                        <button
-                          onClick={() => handleDeleteProduct(productBuman, p.id)}
-                          className="w-[38px] h-[38px] border border-red-200 bg-white hover:bg-red-50 text-[#c0392b] rounded-lg text-[16px] font-extrabold cursor-pointer transition-all"
-                        >
-                          ×
-                        </button>
-                      </div>
+                {/* 제품 제어 테이블 */}
+                <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[760px] shadow-sm">
+                  <div className="grid grid-cols-[56px_160px_1.6fr_80px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
+                    <div className="p-3 text-center">No.</div>
+                    <div className="p-3">제품 분류코드</div>
+                    <div className="p-3">
+                      제품명 {isBlind ? <span className="text-brandBlue font-bold">(평가앱에서는 비공개됩니다.)</span> : ''}
                     </div>
-                  );
-                })}
+                    <div className="p-3 text-center">삭제</div>
+                  </div>
 
-                <div className="p-3.5 bg-gray-50/50">
-                  <button
-                    onClick={() => handleAddProduct(productBuman)}
-                    className="w-full h-[46px] border-[1.5px] border-dashed border-[#c3ccdb] bg-white text-[#3a475c] rounded-xl text-[14px] font-bold cursor-pointer hover:bg-[#f8fafc] transition-all"
-                  >
-                    + 제품 추가
-                  </button>
+                  {(products[productBuman] || []).map((p, idx) => {
+                    return (
+                      <div key={p.id} className="grid grid-cols-[56px_160px_1.6fr_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0">
+                        <div className="p-3 text-center font-bold text-[#8b97ab]">{idx + 1}</div>
+                        <div className="p-1.5">
+                          <input
+                            type="text"
+                            value={p.code}
+                            onChange={(e) => {
+                              const next = (products[productBuman] || []).map(x => x.id === p.id ? { ...x, code: e.target.value } : x);
+                              setProducts({ ...products, [productBuman]: next });
+                            }}
+                            className="w-full h-10 border border-[#dde3ec] rounded-lg px-3 text-[15px] font-extrabold text-primary"
+                          />
+                        </div>
+                        <div className="p-1.5">
+                          <input
+                            type="text"
+                            value={p.name || ''}
+                            onChange={(e) => {
+                              const next = (products[productBuman] || []).map(x => x.id === p.id ? { ...x, name: e.target.value } : x);
+                              setProducts({ ...products, [productBuman]: next });
+                            }}
+                            placeholder="제품명 입력"
+                            className="w-full h-10 border border-[#dde3ec] bg-white font-semibold text-primary rounded-lg px-3 text-[14px]"
+                          />
+                        </div>
+                        <div className="p-1.5 text-center">
+                          <button
+                            onClick={() => handleDeleteProduct(productBuman, p.id)}
+                            className="w-[38px] h-[38px] border border-red-200 bg-white hover:bg-red-50 text-[#c0392b] rounded-lg text-[16px] font-extrabold cursor-pointer transition-all"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="p-3.5 bg-gray-50/50">
+                    <button
+                      onClick={() => handleAddProduct(productBuman)}
+                      className="w-full h-[46px] border-[1.5px] border-dashed border-[#c3ccdb] bg-white text-[#3a475c] rounded-xl text-[14px] font-bold cursor-pointer hover:bg-[#f8fafc] transition-all"
+                    >
+                      + 제품 추가
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 5) 평가항목 설정 (items) */}
           {section === 'items' && (
