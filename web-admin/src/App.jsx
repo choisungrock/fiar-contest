@@ -1105,67 +1105,74 @@ function App() {
               <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[980px] shadow-sm">
                 <div className="grid grid-cols-[56px_90px_130px_1.6fr_150px_80px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
                   <div className="p-3 text-center">No.</div>
-                  <div className="p-3">코드 (Prefix)</div>
+                  <div className="p-3">코드</div>
                   <div className="p-3">평가 방식</div>
                   <div className="p-3">부문명</div>
-                  <div className="p-3">제품 현황</div>
+                  <div className="p-3">제품 수</div>
                   <div className="p-3 text-center">삭제</div>
                 </div>
 
-                {bumans.map((b, idx) => (
-                  <div key={b.id} className="grid grid-cols-[56px_90px_130px_1.6fr_150px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0">
-                    <div className="p-3 text-center font-bold text-[#8b97ab]">{idx + 1}</div>
-                    <div className="p-1.5">
-                      <input
-                        type="text"
-                        value={b.prefix}
-                        onChange={(e) => {
-                          const next = bumans.map(x => x.id === b.id ? { ...x, prefix: e.target.value } : x);
-                          setBumans(next);
-                        }}
-                        className="w-full h-10 border border-[#dde3ec] rounded-lg px-2 text-[15px] font-extrabold text-center text-primary"
-                      />
+                {bumans.map((b, idx) => {
+                  const prodLen = (products[b.prefix] || []).length;
+                  const badgeStyle = prodLen === 0 
+                    ? "bg-[#f4f6fa] text-[#8b97ab] border border-gray-200" 
+                    : "bg-[#eaf3fb] text-[#2f5488] border border-blue-200";
+
+                  return (
+                    <div key={b.id} className="grid grid-cols-[56px_90px_130px_1.6fr_150px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0">
+                      <div className="p-3 text-center font-bold text-[#8b97ab]">{idx + 1}</div>
+                      <div className="p-1.5">
+                        <input
+                          type="text"
+                          value={b.prefix}
+                          onChange={(e) => {
+                            const next = bumans.map(x => x.id === b.id ? { ...x, prefix: e.target.value } : x);
+                            setBumans(next);
+                          }}
+                          className="w-full h-10 border border-[#dde3ec] rounded-lg px-2 text-[15px] font-extrabold text-center text-primary"
+                        />
+                      </div>
+                      <div className="p-1.5">
+                        <select
+                          value={b.cat}
+                          onChange={(e) => {
+                            const next = bumans.map(x => x.id === b.id ? { ...x, cat: e.target.value } : x);
+                            setBumans(next);
+                          }}
+                          className="w-full h-10 border border-[#dde3ec] rounded-lg px-2 text-[13px] font-semibold bg-white text-primary"
+                        >
+                          <option value="open">오픈</option>
+                          <option value="blind">블라인드</option>
+                        </select>
+                      </div>
+                      <div className="p-1.5">
+                        <input
+                          type="text"
+                          value={b.name}
+                          onChange={(e) => {
+                            const next = bumans.map(x => x.id === b.id ? { ...x, name: e.target.value } : x);
+                            setBumans(next);
+                          }}
+                          placeholder="부문명 입력"
+                          className="w-full h-10 border border-[#dde3ec] rounded-lg px-3 text-[14px] font-semibold text-primary"
+                        />
+                      </div>
+                      <div className="p-1.5">
+                        <span className={`inline-flex items-center justify-center min-w-[76px] h-[26px] px-2.5 rounded-full text-[12px] font-extrabold transition-all ${badgeStyle}`}>
+                          {prodLen}개 제품
+                        </span>
+                      </div>
+                      <div className="p-1.5 text-center">
+                        <button
+                          onClick={() => handleDeleteBuman(b.id)}
+                          className="w-[38px] h-[38px] border border-red-200 bg-white hover:bg-red-50 text-[#c0392b] rounded-lg text-[16px] font-extrabold cursor-pointer transition-all"
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
-                    <div className="p-1.5">
-                      <select
-                        value={b.cat}
-                        onChange={(e) => {
-                          const next = bumans.map(x => x.id === b.id ? { ...x, cat: e.target.value } : x);
-                          setBumans(next);
-                        }}
-                        className="w-full h-10 border border-[#dde3ec] rounded-lg px-2 text-[13px] font-semibold bg-white text-primary"
-                      >
-                        <option value="open">오픈</option>
-                        <option value="blind">블라인드</option>
-                      </select>
-                    </div>
-                    <div className="p-1.5">
-                      <input
-                        type="text"
-                        value={b.name}
-                        onChange={(e) => {
-                          const next = bumans.map(x => x.id === b.id ? { ...x, name: e.target.value } : x);
-                          setBumans(next);
-                        }}
-                        placeholder="부문명 입력"
-                        className="w-full h-10 border border-[#dde3ec] rounded-lg px-3 text-[14px] font-semibold text-primary"
-                      />
-                    </div>
-                    <div className="p-1.5">
-                      <span className="inline-block py-1 px-3 text-[12px] font-semibold text-[#8b97ab] bg-[#eef1f6] rounded-full">
-                        {(products[b.prefix] || []).length}개 제품
-                      </span>
-                    </div>
-                    <div className="p-1.5 text-center">
-                      <button
-                        onClick={() => handleDeleteBuman(b.id)}
-                        className="w-[38px] h-[38px] border border-red-200 bg-white hover:bg-red-50 text-[#c0392b] rounded-lg text-[16px] font-extrabold cursor-pointer transition-all"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <div className="p-3.5 bg-gray-50/50">
                   <button
@@ -1177,7 +1184,7 @@ function App() {
                 </div>
               </div>
               <div className="text-[12px] text-[#8b97ab] leading-[1.7] max-w-[980px]">
-                ※ 오픈 부문은 관능평가+상품성평가 세트가, 블라인드는 순수 관능평가 세트가 태블릿 채점지에 매핑됩니다.
+                ※ 오픈은 관능평가+상품성평가 항목세트, 블라인드는 관능평가 항목세트가 적용됩니다. 항목 구성은 '평가항목 설정'에서 관리합니다.
               </div>
             </div>
           )}
