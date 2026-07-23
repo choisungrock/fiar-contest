@@ -269,57 +269,7 @@ def get_group_details(fg_id: int):
                     "groups": list(group_map.values())
                 })
             
-            # 비어있을 시 디폴트 템플릿 구조 로딩
-            if not templates_list:
-                templates_list = [
-                    {
-                        "id": 1001,
-                        "target_type": "open_all",
-                        "target_id": None,
-                        "groups": [
-                            {
-                                "id": 101,
-                                "name": "관능평가",
-                                "convertTo": "70",
-                                "items": [
-                                    {"id": 1, "name": "식품의 색", "max": 15},
-                                    {"id": 2, "name": "식품의 향", "max": 15},
-                                    {"id": 3, "name": "식품의 맛", "max": 30},
-                                    {"id": 4, "name": "식품의 식감", "max": 20},
-                                    {"id": 5, "name": "종합평가", "max": 20}
-                                ]
-                            },
-                            {
-                                "id": 102,
-                                "name": "상품성평가",
-                                "convertTo": "",
-                                "items": [
-                                    {"id": 6, "name": "창의성", "max": 30},
-                                    {"id": 7, "name": "디자인", "max": 20}
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        "id": 1002,
-                        "target_type": "blind_all",
-                        "target_id": None,
-                        "groups": [
-                            {
-                                "id": 201,
-                                "name": "관능평가",
-                                "convertTo": "",
-                                "items": [
-                                    {"id": 8, "name": "술의 색", "max": 20},
-                                    {"id": 9, "name": "술의 향", "max": 20},
-                                    {"id": 10, "name": "술의 맛", "max": 30},
-                                    {"id": 11, "name": "후미 및 목넘김", "max": 20},
-                                    {"id": 12, "name": "종합평가", "max": 30}
-                                ]
-                            }
-                        ]
-                    }
-                ]
+
 
             return {
                 "status": "success",
