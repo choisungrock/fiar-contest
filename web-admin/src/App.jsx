@@ -1483,9 +1483,7 @@ function App() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (window.confirm(`[${titleText}] 평가 설정을 완전히 제거하시겠습니까?`)) {
-                                  handleDeleteTemplate(t.id);
-                                }
+                                handleDeleteTemplate(t.id);
                               }}
                               className="absolute top-2.5 right-2.5 text-gray-400 hover:text-red-600 text-[18px] font-extrabold cursor-pointer transition-all leading-none"
                               title="설정 제거"
