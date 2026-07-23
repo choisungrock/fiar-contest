@@ -160,20 +160,9 @@ function App() {
     ],
   });
 
-  // 컴포넌트 마운트 시 로컬스토리지 복구 및 세션 자동 로그인 체크
   useEffect(() => {
     try {
 
-      const raw = localStorage.getItem('kricefesta_admin_v1');
-      if (raw) {
-        const d = JSON.parse(raw);
-        if (d.systemName) setSystemName(d.systemName);
-        if (d.judges) setJudges(d.judges);
-        if (d.bumans) setBumans(d.bumans);
-        if (d.products) setProducts(d.products);
-        if (d.templates) setTemplates(d.templates);
-      }
-      
       const remember = localStorage.getItem('kricefesta_admin_remember');
       const session = sessionStorage.getItem('kricefesta_admin_session');
       if (remember === 'true' || session === 'true') {
@@ -306,10 +295,10 @@ function App() {
 
       const data = await response.json();
       console.log("로그인 성공:", data);
-      
+
       sessionStorage.setItem('kricefesta_admin_session', 'true');
       localStorage.setItem('kricefesta_admin_remember', 'true');
-      
+
       setIsAuthed(true);
       showToast('성공적으로 관리자 콘솔에 접속하였습니다.');
     } catch (err) {
@@ -329,7 +318,7 @@ function App() {
   // 새 품평회 대그룹 만들기
   const handleAddGroup = async () => {
     const name = "새 품평회 (제목 입력)";
-    
+
     try {
       const response = await fetch("http://localhost:18000/api/admin/groups", {
         method: "POST",
@@ -340,7 +329,7 @@ function App() {
           status: "준비중"
         })
       });
-      
+
       if (response.ok) {
         showToast('새 대그룹 품평회가 추가되었습니다.');
         fetchGroups(); // 백엔드에 쿼리하여 리스트 즉시 리로드
@@ -401,7 +390,7 @@ function App() {
     const target = bumans.find(b => b.id === id);
     const newBumans = bumans.filter(b => b.id !== id);
     setBumans(newBumans);
-    
+
     // 관련 제품 테이블 클리어
     if (target && target.prefix) {
       const nextProducts = { ...products };
@@ -492,7 +481,7 @@ function App() {
   // 변경사항 저장 토스트 노출
   const handleSaveAll = async () => {
     saveState({ groups, systemName, judges, bumans, products, templates });
-    
+
     try {
       const response = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/save`, {
         method: "POST",
@@ -533,7 +522,7 @@ function App() {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#1b2a4a] to-[#20325a] p-5">
         <div className="w-full max-w-[480px] bg-white/5 border border-white/10 rounded-[24px] p-10 md:p-12 shadow-2xl backdrop-blur-md text-center">
-          
+
           {/* 브랜딩 영역 */}
           <div className="mb-9">
             <div className="text-xs font-bold text-[#d9b866] tracking-[3px] uppercase">
@@ -608,7 +597,7 @@ function App() {
 
     return (
       <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#eef1f6', color: '#2b3646', display: 'flex', flexDirection: 'column' }}>
-        
+
         {/* 상단 띠 배너 헤더 */}
         <div style={{ background: 'linear-gradient(135deg,#1b2a4a,#243a63)', color: '#fff', padding: '30px 40px', display: 'flex', alignItems: 'center', gap: '20px', flexShrink: 0 }}>
           <div style={{ flex: 1 }}>
@@ -669,15 +658,15 @@ function App() {
           <div style={{ fontSize: '15px', fontWeight: 800, color: '#1b2a4a', marginBottom: '14px' }}>
             대그룹 목록
           </div>
-          
+
           {/* 품평회 카드 리스트 그리드 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '18px' }}>
             {groups.map((group) => {
               const sc = group.status === '진행중'
                 ? { bg: '#eaf3fb', fg: '#2f5488', bar: '#2f5488' }
                 : group.status === '완료'
-                ? { bg: '#eef7f1', fg: '#2f7a4f', bar: '#2f7a4f' }
-                : { bg: '#f4f6fa', fg: '#8b97ab', bar: '#c3ccdb' };
+                  ? { bg: '#eef7f1', fg: '#2f7a4f', bar: '#2f7a4f' }
+                  : { bg: '#f4f6fa', fg: '#8b97ab', bar: '#c3ccdb' };
 
               const isRice = group.id === 1;
               const bumanCount = isRice ? counts.bumans : (group.bumanCount !== undefined ? group.bumanCount : (group.status === '준비중' ? 0 : 6));
@@ -763,7 +752,7 @@ function App() {
 
   return (
     <div className="w-screen h-screen overflow-hidden bg-[#eef1f6] text-[#2b3646] flex select-none">
-      
+
       {/* 상세 콘솔 사이드바 */}
       <div className="w-[280px] shrink-0 bg-gradient-to-b from-[#1b2a4a] to-[#20325a] text-white flex flex-col overflow-hidden">
         <div className="py-[22px] px-6 border-b border-[#2f4269] shrink-0">
@@ -790,23 +779,21 @@ function App() {
             const active = section === n.key;
             // 각 탭별 요약 카운트 매치
             const cnt = n.key === 'judges' ? counts.judges : n.key === 'bumans' ? counts.bumans : n.key === 'products' ? counts.products : n.key === 'items' ? counts.items : '';
-            
+
             return (
               <button
                 key={n.key}
                 onClick={() => setSection(n.key)}
-                className={`flex items-center gap-3 w-full py-3 px-3.5 mb-1 rounded-[10px] cursor-pointer text-[14px] font-semibold border-none transition-all ${
-                  active
+                className={`flex items-center gap-3 w-full py-3 px-3.5 mb-1 rounded-[10px] cursor-pointer text-[14px] font-semibold border-none transition-all ${active
                     ? 'bg-[#e03b3b] text-white font-extrabold'
                     : 'bg-transparent text-[#c6d2ea] hover:bg-white/5'
-                }`}
+                  }`}
               >
                 <span className="w-[26px] text-[15px] text-center">{n.icon}</span>
                 <span className="flex-1 text-left">{n.label}</span>
                 {cnt !== '' && (
-                  <span className={`text-[11px] font-extrabold py-0.5 px-2 rounded-full ${
-                    active ? 'bg-white/20 text-white' : 'bg-[#2f4269] text-[#9db0d4]'
-                  }`}>
+                  <span className={`text-[11px] font-extrabold py-0.5 px-2 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-[#2f4269] text-[#9db0d4]'
+                    }`}>
                     {cnt}
                   </span>
                 )}
@@ -814,7 +801,7 @@ function App() {
             );
           })}
         </div>
-        
+
         <div className="py-4 px-5 border-top border-[#2f4269] text-[12px] text-bannerSub leading-relaxed shrink-0">
           태블릿 평가자앱과 연동<br />
           변경사항은 자동 반영됩니다
@@ -823,7 +810,7 @@ function App() {
 
       {/* 상세 콘솔 메인 제어판 */}
       <div className="flex-grow flex flex-col overflow-hidden">
-        
+
         {/* 제어판 탑 툴바 */}
         <div className="bg-white border-b border-[#dde3ec] py-[18px] px-[30px] flex items-center gap-4 shrink-0">
           <div className="flex-1">
@@ -844,7 +831,7 @@ function App() {
 
         {/* 핵심 컨텐츠 패널 스위칭 */}
         <div className="flex-1 overflow-auto py-[26px] px-[30px] pb-[60px]">
-          
+
           {/* 1) 시스템 개요 (overview) */}
           {section === 'overview' && (
             <div className="space-y-6">
@@ -884,14 +871,14 @@ function App() {
                   onChange={(e) => setSystemName(e.target.value)}
                   className="mt-4 w-full h-[52px] border-[1.5px] border-[#cbd3e1] rounded-[11px] px-[18px] text-[17px] font-extrabold text-[#1b2a4a] bg-white focus:outline-none focus:border-primary transition-all"
                 />
-                
+
                 <div className="mt-[30px] text-[16px] font-extrabold text-[#1b2a4a] leading-none">
                   평가 방식 정보
                 </div>
                 <div className="mt-3 flex gap-3 flex-wrap">
                   {bumans.length === 0 ? (
                     <div className="w-full border border-dashed border-[#c3ccdb] bg-[#f4f6fa] rounded-[12px] p-5 text-center text-[#8b97ab] font-bold text-[13px]">
-                      평가방식이 아직 정해지지 않았습니다. 평가항목 설정이 안되있습니다.
+                      평가항목 설정이 안되있습니다.
                     </div>
                   ) : (
                     <>
@@ -1084,11 +1071,10 @@ function App() {
                     <button
                       key={b.id}
                       onClick={() => setProductBuman(b.prefix)}
-                      className={`flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] cursor-pointer text-[14px] border transition-all ${
-                        active
+                      className={`flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] cursor-pointer text-[14px] border transition-all ${active
                           ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
                           : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
-                      }`}
+                        }`}
                     >
                       <span className="font-extrabold">{b.prefix}</span>
                       <span className="opacity-90 font-semibold">{b.name}</span>
@@ -1108,7 +1094,7 @@ function App() {
 
                 {(products[productBuman] || []).map((p, idx) => {
                   const isBlind = activeBumanObject?.cat === 'blind';
-                  
+
                   return (
                     <div key={p.id} className="grid grid-cols-[56px_160px_1.6fr_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0">
                       <div className="p-3 text-center font-bold text-[#8b97ab]">{idx + 1}</div>
@@ -1133,11 +1119,10 @@ function App() {
                             setProducts({ ...products, [productBuman]: next });
                           }}
                           placeholder={isBlind ? '블라인드 — 코드만 노출' : '제품명 입력'}
-                          className={`w-full h-10 border rounded-lg px-3 text-[14px] ${
-                            isBlind
+                          className={`w-full h-10 border rounded-lg px-3 text-[14px] ${isBlind
                               ? 'border-dashed border-[#dde3ec] bg-[#f7f8fb] text-[#a7b1c2] cursor-not-allowed'
                               : 'border-[#dde3ec] bg-white font-semibold text-primary'
-                          }`}
+                            }`}
                         />
                       </div>
                       <div className="p-1.5 text-center">
@@ -1146,7 +1131,7 @@ function App() {
                           className="w-[38px] h-[38px] border border-red-200 bg-white hover:bg-red-50 text-[#c0392b] rounded-lg text-[16px] font-extrabold cursor-pointer transition-all"
                         >
                           ×
-                    </button>
+                        </button>
                       </div>
                     </div>
                   );
@@ -1171,21 +1156,19 @@ function App() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setTemplate('open')}
-                  className={`py-3 px-5 rounded-[10px] cursor-pointer text-[14px] font-bold border transition-all ${
-                    template === 'open'
+                  className={`py-3 px-5 rounded-[10px] cursor-pointer text-[14px] font-bold border transition-all ${template === 'open'
                       ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
                       : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
-                  }`}
+                    }`}
                 >
                   오픈 테스트 평가항목 구성
                 </button>
                 <button
                   onClick={() => setTemplate('blind')}
-                  className={`py-3 px-5 rounded-[10px] cursor-pointer text-[14px] font-bold border transition-all ${
-                    template === 'blind'
+                  className={`py-3 px-5 rounded-[10px] cursor-pointer text-[14px] font-bold border transition-all ${template === 'blind'
                       ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
                       : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
-                  }`}
+                    }`}
                 >
                   블라인드 테스트 평가항목 구성
                 </button>
@@ -1194,7 +1177,7 @@ function App() {
               {/* 항목 리스트 카드 루프 */}
               {templates[template].map((g, idx) => {
                 const rawTotal = g.items.reduce((sum, it) => sum + (Number(it.max) || 0), 0);
-                
+
                 return (
                   <div key={g.id} className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[1000px] shadow-sm">
                     {/* 카드 헤더 */}
@@ -1328,7 +1311,7 @@ function App() {
               >
                 + 새 항목 그룹 생성
               </button>
-              
+
               <div className="text-[12px] text-[#8b97ab] leading-relaxed max-w-[1000px]">
                 ※ 5단계 척도는 배점을 5등분하여 자동 생성됩니다. 환산 점수를 비워둘 경우 원점수 그대로 총점에 합산되어 평가가 반영됩니다.
               </div>
@@ -1350,7 +1333,7 @@ function App() {
 
                 // 합계 연산
                 const rawTotal = listScores.reduce((sum, v) => sum + v, 0);
-                
+
                 // 최고/최저 제외 연산
                 let finalTotal = rawTotal;
                 let minIdx = -1;
@@ -1360,10 +1343,10 @@ function App() {
                   const sorted = [...listScores].sort((a, b) => a - b);
                   const minVal = sorted[0];
                   const maxVal = sorted[sorted.length - 1];
-                  
+
                   minIdx = listScores.indexOf(minVal);
                   maxIdx = listScores.lastIndexOf(maxVal); // 동일 점수 시 분리
-                  
+
                   finalTotal = rawTotal - minVal - maxVal;
                 }
 
@@ -1397,11 +1380,10 @@ function App() {
                         <button
                           key={b.id}
                           onClick={() => setResultBuman(b.prefix)}
-                          className={`flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] cursor-pointer text-[14px] border transition-all ${
-                            active
+                          className={`flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] cursor-pointer text-[14px] border transition-all ${active
                               ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
                               : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
-                          }`}
+                            }`}
                         >
                           <span className="font-extrabold">{b.prefix}</span>
                           <span className="opacity-90 font-semibold">{b.name}</span>
@@ -1486,18 +1468,17 @@ function App() {
                               <td className="sticky left-[90px] bg-inherit p-3 font-semibold text-[#3a475c] text-left z-10 truncate max-w-[180px]">
                                 {m.name}
                               </td>
-                              
+
                               {/* 심사위원 개별 점수 */}
                               {m.scores.map((sc, scIdx) => (
                                 <td
                                   key={scIdx}
-                                  className={`p-3 text-center font-semibold border-l border-[#f2f4f8] ${
-                                    sc.isMax
+                                  className={`p-3 text-center font-semibold border-l border-[#f2f4f8] ${sc.isMax
                                       ? 'text-[#2f5488] bg-blue-50/70 font-bold'
                                       : sc.isMin
-                                      ? 'text-[#c0392b] bg-red-50/70 font-bold'
-                                      : 'text-[#3a475c]'
-                                  }`}
+                                        ? 'text-[#c0392b] bg-red-50/70 font-bold'
+                                        : 'text-[#3a475c]'
+                                    }`}
                                 >
                                   {sc.val}
                                   {sc.isMax && <span className="block text-[9px] text-blue-500 font-extrabold leading-none mt-0.5">최고 제외</span>}
@@ -1515,15 +1496,14 @@ function App() {
                               </td>
                               {/* 순위 */}
                               <td className="p-3 text-center bg-[#f4f6fb] border-l border-[#f2f4f8]">
-                                <span className={`inline-block w-6 h-6 rounded-full text-center leading-6 text-[12px] font-extrabold ${
-                                  rank === 1
+                                <span className={`inline-block w-6 h-6 rounded-full text-center leading-6 text-[12px] font-extrabold ${rank === 1
                                     ? 'bg-[#d9b866] text-white'
                                     : rank === 2
-                                    ? 'bg-gray-400 text-white'
-                                    : rank === 3
-                                    ? 'bg-[#b58a2e] text-white'
-                                    : 'bg-transparent text-[#5a6a82]'
-                                }`}>
+                                      ? 'bg-gray-400 text-white'
+                                      : rank === 3
+                                        ? 'bg-[#b58a2e] text-white'
+                                        : 'bg-transparent text-[#5a6a82]'
+                                  }`}>
                                   {rank}
                                 </span>
                               </td>
