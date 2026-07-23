@@ -1979,6 +1979,33 @@ function App() {
                 rankMap[item.code] = idx + 1;
               });
 
+              // 3. 심사위원별 개별 상세 집계 데이터셋 구성
+              const judgeSheets = judges.map((j, jIdx) => {
+                const sheetRows = (products[rbk] || []).map((p, pIdx) => {
+                  const detailed = getJudgeDetailedScores(pIdx, jIdx, p);
+                  return {
+                    code: p.code,
+                    name: isBlind ? '블라인드 제품' : p.name,
+                    detailed
+                  };
+                });
+
+                const sortedRows = [...sheetRows].sort((a, b) => b.detailed.totalConverted - a.detailed.totalConverted);
+                const localRankMap = {};
+                sortedRows.forEach((row, rIdx) => {
+                  localRankMap[row.code] = rIdx + 1;
+                });
+
+                return {
+                  judgeName: j.name,
+                  judgeIdx: jIdx,
+                  rows: sheetRows.map(row => ({
+                    ...row,
+                    rank: localRankMap[row.code]
+                  }))
+                };
+              });
+
               return (
                 <div className="space-y-5">
                   {/* 부문 전환 탭 */}
