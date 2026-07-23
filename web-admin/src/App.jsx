@@ -162,20 +162,24 @@ function App() {
 
   // 특정 품평회 상세 정보 로딩 API 연동 함수
   const fetchGroupDetails = async (groupId) => {
+    console.log("[fetchGroupDetails] API 요청 시작, activeGroup:", groupId);
     try {
       const response = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/details`);
       if (response.ok) {
         const data = await response.json();
+        console.log("[fetchGroupDetails] API 응답 수신 성공:", data);
         if (data.status === "success") {
-          setSystemName(data.systemName);
-          setJudges(data.judges);
-          setBumans(data.bumans);
-          setProducts(data.products);
-          setTemplates(data.templates);
+          setSystemName(data.systemName || '');
+          setJudges(data.judges || []);
+          setBumans(data.bumans || []);
+          setProducts(data.products || {});
+          setTemplates(data.templates || { open: [], blind: [] });
         }
+      } else {
+        console.error("[fetchGroupDetails] API 응답 에러 상태:", response.status);
       }
     } catch (e) {
-      console.error("상세 정보 API 호출 실패:", e);
+      console.error("[fetchGroupDetails] 상세 정보 API 호출 실패:", e);
     }
   };
 
