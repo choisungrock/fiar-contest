@@ -41,8 +41,15 @@ function App() {
   // 1) 로그인 화면 전용 상태
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
-  const [isAuthed, setIsAuthed] = useState(false);
+  const [isAuthed, setIsAuthed] = useState(() => {
+    try {
+      const remember = localStorage.getItem('kricefesta_admin_remember');
+      const session = sessionStorage.getItem('kricefesta_admin_session');
+      return remember === 'true' || session === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
 
   // 2) 관리자 대시보드 및 상세 제어 상태
   const [view, setView] = useState('dashboard'); // dashboard | console
