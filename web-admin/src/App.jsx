@@ -156,7 +156,8 @@ function App() {
       }
       
       const remember = localStorage.getItem('kricefesta_admin_remember');
-      if (remember === 'true') {
+      const session = sessionStorage.getItem('kricefesta_admin_session');
+      if (remember === 'true' || session === 'true') {
         setIsAuthed(true);
       }
     } catch (e) {
@@ -208,8 +209,11 @@ function App() {
       const data = await response.json();
       console.log("로그인 성공:", data);
       
+      sessionStorage.setItem('kricefesta_admin_session', 'true');
       if (rememberMe) {
         localStorage.setItem('kricefesta_admin_remember', 'true');
+      } else {
+        localStorage.removeItem('kricefesta_admin_remember');
       }
       
       setIsAuthed(true);
@@ -223,6 +227,7 @@ function App() {
   // 로그아웃
   const handleLogout = () => {
     localStorage.removeItem('kricefesta_admin_remember');
+    sessionStorage.removeItem('kricefesta_admin_session');
     setIsAuthed(false);
     setView('dashboard');
   };
