@@ -611,11 +611,10 @@ function App() {
                   ? { bg: '#eef7f1', fg: '#2f7a4f', bar: '#2f7a4f' }
                   : { bg: '#f4f6fa', fg: '#8b97ab', bar: '#c3ccdb' };
 
-              const isRice = group.id === 1;
-              const isCurrentActive = group.id === activeGroup;
-              const bumanCount = isCurrentActive ? counts.bumans : (group.bumanCount ?? (group.status === '준비중' ? 0 : 6));
-              const judgeCount = isCurrentActive ? counts.judges : (group.judgeCount ?? (group.status === '준비중' ? 0 : 8));
-              const productCount = isCurrentActive ? counts.products : (group.productCount ?? (group.status === '준비중' ? 0 : 32));
+              const isCurrentActive = view === 'console' && group.id === activeGroup;
+              const bumanCount = isCurrentActive ? counts.bumans : (group.bumanCount !== undefined ? group.bumanCount : (group.status === '준비중' ? 0 : 4));
+              const judgeCount = isCurrentActive ? counts.judges : (group.judgeCount !== undefined ? group.judgeCount : (group.status === '준비중' ? 0 : 3));
+              const productCount = isCurrentActive ? counts.products : (group.productCount !== undefined ? group.productCount : (group.status === '준비중' ? 0 : 8));
 
               return (
                 <div
@@ -642,7 +641,7 @@ function App() {
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                     <div style={{ flex: 1, fontSize: '18px', fontWeight: 800, color: '#1b2a4a', lineHeight: 1.4 }}>
-                      {isRice ? systemName : group.name}
+                      {group.name}
                     </div>
                     <span style={{ background: sc.bg, color: sc.fg, borderRadius: '8px', padding: '5px 12px', fontSize: '12px', fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0 }}>
                       {group.status}
