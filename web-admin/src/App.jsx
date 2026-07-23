@@ -1116,7 +1116,7 @@ function App() {
                   const prodLen = (products[b.prefix] || []).length;
                   const badgeStyle = (b.cat === 'blind' || b.type === 'blind')
                     ? "bg-[#eef4fb] text-[#2f5488] border border-[#c6d6ee]"
-                    : "bg-[#f2f7ea] text-[#5a7a3f] border border-[#cfe0cf]";
+                    : "bg-[#f2f7ec] text-[#5a7a3f] border border-[#cfe0cf]";
 
                   return (
                     <div key={b.id} className="grid grid-cols-[56px_90px_130px_1.6fr_150px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0">
@@ -1158,7 +1158,7 @@ function App() {
                         />
                       </div>
                       <div className="p-1.5">
-                        <span className={`inline-flex items-center justify-center py-[3px] px-[9px] rounded-[6px] text-[12px] font-bold transition-all ${badgeStyle}`}>
+                        <span className={`inline-block py-[6px] px-[12px] rounded-[8px] text-[13px] font-bold border transition-all ${badgeStyle}`}>
                           {prodLen}개 제품
                         </span>
                       </div>
