@@ -138,10 +138,16 @@ function App() {
   // 컴포넌트 마운트 시 로컬스토리지 복구 및 세션 자동 로그인 체크
   useEffect(() => {
     try {
+      const defaultGroups = [
+        { id: 1, name: '2026 우리쌀·우리술 K-라이스페스타 품평회', period: '2026.09.01 – 09.03', status: '진행중', progress: 62 },
+        { id: 2, name: '2025 전국 발효식품 품평회', period: '2025.11.10 – 11.12', status: '완료', progress: 100 },
+        { id: 3, name: '2026 지역특산 가공식품 경진대회', period: '2026.10.15 – 10.16', status: '준비중', progress: 0 },
+      ];
+      setGroups(defaultGroups);
+
       const raw = localStorage.getItem('kricefesta_admin_v1');
       if (raw) {
         const d = JSON.parse(raw);
-        if (d.groups) setGroups(d.groups);
         if (d.systemName) setSystemName(d.systemName);
         if (d.judges) setJudges(d.judges);
         if (d.bumans) setBumans(d.bumans);
@@ -497,12 +503,6 @@ function App() {
             >
               + 새 대그룹 만들기
             </button>
-            <button
-              onClick={handleLogout}
-              style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#c6d2ea', borderRadius: '11px', height: '50px', padding: '0 20px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
-            >
-              로그아웃
-            </button>
           </div>
         </div>
 
@@ -602,51 +602,6 @@ function App() {
             })}
           </div>
         </div>
-      </div>
-    );
-  }
-] font-extrabold text-[#3a475c] leading-none">{bumanCount}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11px] text-[#9aa6bb] font-semibold">평가자</div>
-                      <div className="mt-[2px] text-[20px] font-extrabold text-[#3a475c] leading-none">{judgeCount}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11px] text-[#9aa6bb] font-semibold">제품</div>
-                      <div className="mt-[2px] text-[20px] font-extrabold text-[#3a475c] leading-none">{productCount}</div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4.5">
-                    <div className="flex justify-between text-[12px] font-bold text-[#8b97ab] mb-1.5 leading-none">
-                      <span>평가 진행률</span>
-                      <span className="text-[#b58a2e]">{group.progress}%</span>
-                    </div>
-                    <div className="h-2 rounded-[6px] bg-[#eef1f6] overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#d9b866] to-[#b58a2e] rounded-[6px]"
-                        style={{ width: `${group.progress}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4.5 text-[13px] font-bold text-[#e03b3b] leading-none">
-                    관리하기 →
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-        </div>
-
-        {/* 토스트 */}
-        {toast && (
-          <div className="fixed left-[50%] bottom-[36px] -translate-x-[50%] bg-[#1b2a4a] text-white py-[14px] px-[26px] rounded-[12px] text-[15px] font-semibold shadow-[0_10px_30px_rgba(0,0,0,0.25)] z-[50] flex items-center gap-[10px]">
-            <span className="w-[22px] h-[22px] rounded-full bg-[#3ea06a] inline-flex items-center justify-center text-[13px] font-extrabold text-white">✓</span>
-            {toast}
-          </div>
-        )}
       </div>
     );
   }
