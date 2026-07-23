@@ -52,10 +52,32 @@ function App() {
   });
 
   // 2) 관리자 대시보드 및 상세 제어 상태
-  const [view, setView] = useState('dashboard'); // dashboard | console
+  const [view, setView] = useState(() => {
+    try {
+      const path = window.location.pathname;
+      return path.startsWith('/console') ? 'console' : 'dashboard';
+    } catch (e) {
+      return 'dashboard';
+    }
+  }); // dashboard | console
   const [groups, setGroups] = useState([]);
-  const [activeGroup, setActiveGroup] = useState(1);
-  const [section, setSection] = useState('overview');
+  const [activeGroup, setActiveGroup] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const gid = params.get('groupId');
+      return gid ? parseInt(gid, 10) : 1;
+    } catch (e) {
+      return 1;
+    }
+  });
+  const [section, setSection] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('section') || 'overview';
+    } catch (e) {
+      return 'overview';
+    }
+  });
   const [systemName, setSystemName] = useState('2026 우리쌀·우리술 K-라이스페스타 품평회');
   const [productBuman, setProductBuman] = useState('A');
   const [resultBuman, setResultBuman] = useState('A');
@@ -182,6 +204,39 @@ function App() {
       fetchGroups();
     }
   }, [isAuthed]);
+
+  // view, activeGroup, section 변경 시 URL 주소 동적으로 갱신
+  useEffect(() => {
+    if (!isAuthed) return;
+    let url = "/";
+    if (view === 'console') {
+      url = `/console?groupId=${activeGroup}&section=${section}`;
+    }
+    const currentUrl = window.location.pathname + window.location.search;
+    if (currentUrl !== url) {
+      window.history.pushState({ view, activeGroup, section }, "", url);
+    }
+  }, [view, activeGroup, section, isAuthed]);
+
+  // 브라우저 뒤로가기 / 앞으로가기 이벤트 (popstate) 리스너 연동
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
+      if (path.startsWith('/console')) {
+        setView('console');
+        const gid = params.get('groupId');
+        if (gid) {
+          setActiveGroup(parseInt(gid, 10));
+        }
+        setSection(params.get('section') || 'overview');
+      } else {
+        setView('dashboard');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // 특정 품평회 상세 정보 로딩 API 연동 함수
   const fetchGroupDetails = async (groupId) => {
