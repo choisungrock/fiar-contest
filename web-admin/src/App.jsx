@@ -84,6 +84,15 @@ function App() {
   const [template, setTemplate] = useState('open'); // open | blind (항목 설정용)
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [dbBackup, setDbBackup] = useState({
+    systemName: '',
+    startDate: '',
+    endDate: '',
+    judges: [],
+    bumans: [],
+    products: {},
+    templates: { open: [], blind: [] }
+  });
   const [toast, setToast] = useState('');
 
   // 3) 관리 리소스 데이터 상태
@@ -177,33 +186,41 @@ function App() {
           setProducts(data.products || {});
           setTemplates(data.templates || { open: [], blind: [] });
 
+          let parsedStart = '';
+          let parsedEnd = '';
           if (data.period) {
             const cleanPeriod = data.period.replace(/\./g, '-').replace(/\s/g, '');
-            // dash, wave, en-dash 등 구분자 지원 분할
             const parts = cleanPeriod.split(/–|~|--/);
             if (parts.length >= 2) {
               const start = parts[0];
               let end = parts[1];
               if (start.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                setStartDate(start);
+                parsedStart = start;
                 if (end.match(/^\d{2}-\d{2}$/)) {
                   end = `${start.substring(0, 4)}-${end}`;
                 }
                 if (end.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                  setEndDate(end);
+                  parsedEnd = end;
                 }
               }
             } else if (cleanPeriod.match(/^\d{4}-\d{2}-\d{2}$/)) {
-              setStartDate(cleanPeriod);
-              setEndDate(cleanPeriod);
-            } else {
-              setStartDate('');
-              setEndDate('');
+              parsedStart = cleanPeriod;
+              parsedEnd = cleanPeriod;
             }
-          } else {
-            setStartDate('');
-            setEndDate('');
           }
+
+          setStartDate(parsedStart);
+          setEndDate(parsedEnd);
+
+          setDbBackup({
+            systemName: data.systemName || '',
+            startDate: parsedStart,
+            endDate: parsedEnd,
+            judges: data.judges || [],
+            bumans: data.bumans || [],
+            products: data.products || {},
+            templates: data.templates || { open: [], blind: [] }
+          });
         }
       } else {
         console.error("[fetchGroupDetails] API 응답 에러 상태:", response.status);
@@ -218,6 +235,21 @@ function App() {
       fetchGroupDetails(activeGroup);
     }
   }, [isAuthed, view, activeGroup]);
+
+  // 브라우저 새로고침 및 탭 닫기 이탈 가드
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      const current = JSON.stringify({ systemName, startDate, endDate, judges, bumans, products, templates });
+      const backup = JSON.stringify(dbBackup);
+      if (current !== backup) {
+        e.preventDefault();
+        e.returnValue = "저장하지 않은 변경사항이 있습니다. 페이지를 벗어나시겠습니까?";
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [systemName, startDate, endDate, judges, bumans, products, templates, dbBackup]);
 
   // groups 목록이 갱신되거나 activeGroup이 바뀔 때, 해당 대회의 이름으로 systemName 동적 복원 보정
   useEffect(() => {
@@ -499,6 +531,15 @@ function App() {
       });
 
       if (response.ok) {
+        setDbBackup({
+          systemName,
+          startDate,
+          endDate,
+          judges,
+          bumans,
+          products,
+          templates
+        });
         showToast('모든 설정 변경 사항이 데이터베이스에 자동 반영 및 저장되었습니다.');
         fetchGroups();
       } else {
@@ -506,8 +547,53 @@ function App() {
       }
     } catch (e) {
       console.error("데이터베이스 저장 중 에러:", e);
+      setDbBackup({
+        systemName,
+        startDate,
+        endDate,
+        judges,
+        bumans,
+        products,
+        templates
+      });
       showToast('모든 설정 변경 사항이 로컬 스토리지에 동기화 저장되었습니다.');
     }
+  };
+
+  // 이탈 가드: 변경 사항 감지 및 컨펌/복원 수행
+  const confirmLeave = async () => {
+    const hasUnsavedChanges = () => {
+      const current = JSON.stringify({ systemName, startDate, endDate, judges, bumans, products, templates });
+      const backup = JSON.stringify(dbBackup);
+      return current !== backup;
+    };
+
+    if (hasUnsavedChanges()) {
+      const answer = window.confirm("저장하지 않은 변경사항이 있습니다. 이동하기 전에 저장하시겠습니까?\n\n[확인]을 누르면 저장 후 이동하며, [취소]를 누르면 변경을 취소하고 원래 상태로 복원한 뒤 이동합니다.");
+      if (answer) {
+        await handleSaveAll();
+        return true;
+      } else {
+        setSystemName(dbBackup.systemName);
+        setStartDate(dbBackup.startDate);
+        setEndDate(dbBackup.endDate);
+        setJudges(dbBackup.judges);
+        setBumans(dbBackup.bumans);
+        setProducts(dbBackup.products);
+        setTemplates(dbBackup.templates);
+        
+        saveState({
+          groups,
+          systemName: dbBackup.systemName,
+          judges: dbBackup.judges,
+          bumans: dbBackup.bumans,
+          products: dbBackup.products,
+          templates: dbBackup.templates
+        });
+        return true;
+      }
+    }
+    return true;
   };
 
   // 통계 계산
@@ -758,7 +844,12 @@ function App() {
       <div className="w-[280px] shrink-0 bg-gradient-to-b from-[#1b2a4a] to-[#20325a] text-white flex flex-col overflow-hidden">
         <div className="py-[22px] px-6 border-b border-[#2f4269] shrink-0">
           <button
-            onClick={() => setView('dashboard')}
+            onClick={async () => {
+              const proceed = await confirmLeave();
+              if (proceed) {
+                setView('dashboard');
+              }
+            }}
             className="bg-transparent border border-[#45577f] text-[#c6d2ea] rounded-[9px] h-[36px] px-3 text-[13px] font-semibold cursor-pointer mb-3.5 hover:bg-[#243a63] transition-all"
           >
             ← 대시보드
@@ -784,7 +875,12 @@ function App() {
             return (
               <button
                 key={n.key}
-                onClick={() => setSection(n.key)}
+                onClick={async () => {
+                  const proceed = await confirmLeave();
+                  if (proceed) {
+                    setSection(n.key);
+                  }
+                }}
                 className={`flex items-center gap-3 w-full py-3 px-3.5 mb-1 rounded-[10px] cursor-pointer text-[14px] font-semibold border-none transition-all ${active
                     ? 'bg-[#e03b3b] text-white font-extrabold'
                     : 'bg-transparent text-[#c6d2ea] hover:bg-white/5'
