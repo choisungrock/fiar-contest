@@ -1864,10 +1864,34 @@ function App() {
               const isBlind = activeResultBumanObject?.cat === 'blind' || activeResultBumanObject?.type === 'blind';
               const canTrim = judges.length >= 3;
 
+              // 1. 현재 부문에 부합하는 템플릿 및 합계 배점 탐색
+              const bumanObj = bumans.find(b => b.prefix === rbk);
+              const bumanType = bumanObj?.cat || bumanObj?.type || 'open';
+              const matchTemplate = templates.find(t => t.target_type === 'specific_buman' && t.target_id === rbk)
+                || templates.find(t => t.target_type === (bumanType === 'blind' ? 'blind_all' : 'open_all'));
+
+              let templateMaxTotal = 120;
+              if (matchTemplate && matchTemplate.groups) {
+                templateMaxTotal = matchTemplate.groups.reduce((sum, g) => {
+                  const groupConvert = parseInt(g.convertTo) || 0;
+                  if (groupConvert > 0) return sum + groupConvert;
+                  const groupItemsSum = (g.items || []).reduce((iSum, it) => iSum + (parseInt(it.max) || 0), 0);
+                  return sum + groupItemsSum;
+                }, 0);
+              }
+              if (templateMaxTotal <= 0) templateMaxTotal = 120;
+
+              // 2. 가변 템플릿 만점에 비례 연동하여 시뮬레이션 채점
+              const getScaledScore = (pi, ji, code) => {
+                const s120 = sampleScore(pi, ji, code);
+                const ratio = s120 / 120;
+                return Math.round(ratio * templateMaxTotal);
+              };
+
               // 각 제품별 심사위원 채점 매트릭스 데이터 생성
               const matrixList = (products[rbk] || []).map((p, pIdx) => {
                 const listScores = judges.map((j, jIdx) => {
-                  return sampleScore(pIdx, jIdx, p.code);
+                  return getScaledScore(pIdx, jIdx, p.code);
                 });
 
                 // 합계 연산
