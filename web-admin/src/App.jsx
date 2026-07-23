@@ -1464,7 +1464,7 @@ function App() {
                       } else {
                         const bm = bumans.find(b => b.prefix === t.target_id);
                         titleText = `[${t.target_id}] ${bm ? bm.name : ''} 전용`;
-                        subText = "부문별 개별 오버라이드";
+                        subText = "부문별 개별 오버라이드 => 기본 공통보다 우선합니다.";
                       }
 
                       return (
