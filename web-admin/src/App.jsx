@@ -172,6 +172,27 @@ function App() {
     }
   }, []);
 
+  // 실제 대그룹 목록 API Fetch 연동 함수
+  const fetchGroups = async () => {
+    try {
+      const response = await fetch("http://localhost:18000/api/admin/groups");
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === "success" && data.groups) {
+          setGroups(data.groups);
+        }
+      }
+    } catch (e) {
+      console.error("대그룹 목록 API 호출 실패:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthed) {
+      fetchGroups();
+    }
+  }, [isAuthed]);
+
   // 전체 데이터 로컬 스토리지 보관 헬퍼
   const saveState = (patch) => {
     try {
@@ -236,19 +257,41 @@ function App() {
   };
 
   // 새 품평회 대그룹 만들기
-  const handleAddGroup = () => {
+  const handleAddGroup = async () => {
     const nextId = groups.length + 1;
     const name = `제 ${nextId}회 쌀·술가공식품 품평회`;
-    const newGroups = [...groups, {
-      id: nextId,
-      name,
-      period: '2026.11.01 – 11.03',
-      status: '준비중',
-      progress: 0
-    }];
-    setGroups(newGroups);
-    saveState({ groups: newGroups });
-    showToast('새 대그룹 품평회가 추가되었습니다.');
+    
+    try {
+      const response = await fetch("http://localhost:18000/api/admin/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name,
+          period: "2026.11.01 – 11.03",
+          status: "준비중"
+        })
+      });
+      
+      if (response.ok) {
+        showToast('새 대그룹 품평회가 추가되었습니다.');
+        fetchGroups(); // 백엔드에 쿼리하여 리스트 즉시 리로드
+      } else {
+        alert("대그룹 생성에 실패하였습니다.");
+      }
+    } catch (e) {
+      console.error("대그룹 생성 오류:", e);
+      // Fallback
+      const newGroups = [...groups, {
+        id: nextId,
+        name,
+        period: '2026.11.01 – 11.03',
+        status: '준비중',
+        progress: 0
+      }];
+      setGroups(newGroups);
+      saveState({ groups: newGroups });
+      showToast('새 대그룹 품평회가 추가되었습니다. (오프라인 모드)');
+    }
   };
 
   // 평가자 추가
@@ -541,9 +584,9 @@ function App() {
                 : { bg: '#f4f6fa', fg: '#8b97ab', bar: '#c3ccdb' };
 
               const isRice = group.id === 1;
-              const bumanCount = isRice ? counts.bumans : (group.status === '준비중' ? 0 : 6);
-              const judgeCount = isRice ? counts.judges : (group.status === '준비중' ? 0 : 8);
-              const productCount = isRice ? counts.products : (group.status === '준비중' ? 0 : 32);
+              const bumanCount = isRice ? counts.bumans : (group.bumanCount !== undefined ? group.bumanCount : (group.status === '준비중' ? 0 : 6));
+              const judgeCount = isRice ? counts.judges : (group.judgeCount !== undefined ? group.judgeCount : (group.status === '준비중' ? 0 : 8));
+              const productCount = isRice ? counts.products : (group.productCount !== undefined ? group.productCount : (group.status === '준비중' ? 0 : 32));
 
               return (
                 <div
