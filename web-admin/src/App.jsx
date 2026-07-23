@@ -186,7 +186,25 @@ function App() {
           setJudges(data.judges || []);
           setBumans(data.bumans || []);
           setProducts(data.products || {});
-          const fetchedTemplates = data.templates || [];
+          const fetchedTemplates = (data.templates || []).map(t => {
+            return {
+              ...t,
+              groups: (t.groups || []).map(g => {
+                return {
+                  ...g,
+                  items: (g.items || []).map(it => {
+                    if (!it.scaleValues) {
+                      const mVal = parseInt(it.max) || 0;
+                      const stepSize = mVal / 5;
+                      const calculatedStr = Array.from({ length: 5 }, (_, i) => Math.round(stepSize * (i + 1))).join(', ');
+                      return { ...it, scaleValues: calculatedStr };
+                    }
+                    return it;
+                  })
+                };
+              })
+            };
+          });
           setTemplates(fetchedTemplates);
           if (fetchedTemplates.length > 0) {
             setActiveTemplateId(fetchedTemplates[0].id);
@@ -548,7 +566,7 @@ function App() {
           if (g.id !== gid) return g;
           return {
             ...g,
-            items: [...g.items, { id: nextUid(), name: '', max: 10 }]
+            items: [...g.items, { id: nextUid(), name: '', max: 10, scaleValues: '2, 4, 6, 8, 10' }]
           };
         })
       };
@@ -1704,6 +1722,7 @@ function App() {
                                     type="text"
                                     value={it.max}
                                     onChange={(e) => {
+                                      const nextMax = e.target.value.replace(/[^0-9]/g, '');
                                       const next = templates.map(t => {
                                         if (t.id !== activeTemplate.id) return t;
                                         return {
@@ -1712,7 +1731,20 @@ function App() {
                                             if (x.id !== g.id) return x;
                                             return {
                                               ...x,
-                                              items: x.items.map(s => s.id === it.id ? { ...s, max: e.target.value.replace(/[^0-9]/g, '') } : s)
+                                              items: x.items.map(s => {
+                                                if (s.id !== it.id) return s;
+                                                
+                                                const mVal = parseInt(nextMax) || 0;
+                                                const steps = s.scaleValues ? s.scaleValues.split(',').length : 5;
+                                                const stepSize = mVal / steps;
+                                                const nextScaleValues = Array.from({ length: steps }, (_, i) => Math.round(stepSize * (i + 1))).join(', ');
+                                                
+                                                return { 
+                                                  ...s, 
+                                                  max: nextMax,
+                                                  scaleValues: nextScaleValues
+                                                };
+                                              })
                                             };
                                           })
                                         };
