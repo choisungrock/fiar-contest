@@ -323,7 +323,7 @@ def get_group_details(fg_id: int):
                 "status": "success",
                 "systemName": system_name,
                 "period": period,
-                "status": status,
+                "groupStatus": status,
                 "judges": judges_list,
                 "bumans": bumans_list,
                 "products": products_map,

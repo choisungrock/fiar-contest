@@ -168,7 +168,7 @@ function App() {
       if (response.ok) {
         const data = await response.json();
         console.log("[fetchGroupDetails] API 응답 수신 성공:", data);
-        if (data.status === "success") {
+        if (data.status === "success" || data.judges !== undefined) {
           setSystemName(data.systemName || '');
           setJudges(data.judges || []);
           setBumans(data.bumans || []);
