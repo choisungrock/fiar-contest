@@ -1,5 +1,6 @@
 // K-라이스페스타 전문가 품평회 관리자 콘솔 종합 애플리케이션 React 컴포넌트
 import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 
 // 공통 네비게이션 명세
 const NAV = [
@@ -94,6 +95,8 @@ function App() {
     templates: []
   });
   const [toast, setToast] = useState('');
+  const [resultsSubTab, setResultsSubTab] = useState('summary'); // summary | judges
+  const [selectedResultJudgeIdx, setSelectedResultJudgeIdx] = useState(0);
   const [draggedIdx, setDraggedIdx] = useState(null);
   const [showAddTemplateForm, setShowAddTemplateForm] = useState(false);
   const [newTemplateTargetType, setNewTemplateTargetType] = useState('open_all');
@@ -1870,28 +1873,71 @@ function App() {
               const matchTemplate = templates.find(t => t.target_type === 'specific_buman' && t.target_id === rbk)
                 || templates.find(t => t.target_type === (bumanType === 'blind' ? 'blind_all' : 'open_all'));
 
-              let templateMaxTotal = 120;
-              if (matchTemplate && matchTemplate.groups) {
-                templateMaxTotal = matchTemplate.groups.reduce((sum, g) => {
-                  const groupConvert = parseInt(g.convertTo) || 0;
-                  if (groupConvert > 0) return sum + groupConvert;
-                  const groupItemsSum = (g.items || []).reduce((iSum, it) => iSum + (parseInt(it.max) || 0), 0);
-                  return sum + groupItemsSum;
-                }, 0);
-              }
-              if (templateMaxTotal <= 0) templateMaxTotal = 120;
+              // 2. 심사위원별 상세 채점 점수 분리 배분(Distribution) 시뮬레이션 헬퍼 정의
+              const getJudgeDetailedScores = (pIdx, jIdx, p) => {
+                const h = hashStr(p.code);
+                const baseRatio = 0.78 + ((h + pIdx * 13 + jIdx * 7) % 21) / 100;
+                
+                const groupResults = [];
+                let totalRawScore = 0;
+                let totalConvertedScore = 0;
+                let itemScoresMap = {};
 
-              // 2. 가변 템플릿 만점에 비례 연동하여 시뮬레이션 채점
-              const getScaledScore = (pi, ji, code) => {
-                const s120 = sampleScore(pi, ji, code);
-                const ratio = s120 / 120;
-                return Math.round(ratio * templateMaxTotal);
+                if (matchTemplate && matchTemplate.groups) {
+                  matchTemplate.groups.forEach((g) => {
+                    const gMaxRaw = (g.items || []).reduce((sum, it) => sum + (parseInt(it.max) || 0), 0);
+                    const gConvertTo = parseInt(g.convertTo) || 0;
+                    
+                    let gRawScore = Math.round(gMaxRaw * baseRatio);
+                    let assignedRawSum = 0;
+                    const gItems = g.items || [];
+                    
+                    gItems.forEach((it, idx) => {
+                      const itMax = parseInt(it.max) || 0;
+                      let itScore = 0;
+                      if (idx === gItems.length - 1) {
+                        itScore = Math.max(0, gRawScore - assignedRawSum);
+                      } else {
+                        itScore = Math.round(itMax * baseRatio);
+                        assignedRawSum += itScore;
+                      }
+                      itScore = Math.min(itMax, itScore);
+                      itemScoresMap[it.id] = itScore;
+                    });
+                    
+                    const actualRawSum = gItems.reduce((sum, it) => sum + (itemScoresMap[it.id] || 0), 0);
+                    
+                    let gConverted = actualRawSum;
+                    if (gConvertTo > 0 && gMaxRaw > 0) {
+                      gConverted = Math.round((actualRawSum / gMaxRaw) * gConvertTo);
+                    }
+                    
+                    totalRawScore += actualRawSum;
+                    totalConvertedScore += gConverted;
+                    
+                    groupResults.push({
+                      groupId: g.id,
+                      rawSum: actualRawSum,
+                      converted: gConverted
+                    });
+                  });
+                } else {
+                  const s120 = sampleScore(pIdx, jIdx, p.code);
+                  totalConvertedScore = s120;
+                }
+                
+                return {
+                  itemScores: itemScoresMap,
+                  groupScores: groupResults,
+                  totalRaw: totalRawScore,
+                  totalConverted: totalConvertedScore
+                };
               };
 
               // 각 제품별 심사위원 채점 매트릭스 데이터 생성
               const matrixList = (products[rbk] || []).map((p, pIdx) => {
                 const listScores = judges.map((j, jIdx) => {
-                  return getScaledScore(pIdx, jIdx, p.code);
+                  return getJudgeDetailedScores(pIdx, jIdx, p).totalConverted;
                 });
 
                 // 합계 연산
@@ -1979,126 +2025,394 @@ function App() {
                     </div>
                   </div>
 
-                  {/* 순위 매트릭스 타이틀 */}
-                  <div>
-                    <div className="text-[15px] font-extrabold text-[#1b2a4a]">
-                      부문 집계 결과 매트릭스 ({activeResultBumanObject?.name})
-                    </div>
-                    <div className="text-[13px] text-[#8b97ab] mt-1">
-                      심사위원별 점수 · 최고( <span className="text-[#2f5488] font-bold">파랑</span> ) 및 최저( <span className="text-[#c0392b] font-bold">주황</span> ) 점수는 집계 신뢰도 확보를 위해 최종 합계 계산에서 제외됩니다.
-                    </div>
+                  {/* 결과 세부 화면 서브 탭 분류 */}
+                  <div className="flex gap-4 border-b border-[#dde3ec] pb-1 max-w-[1100px] mt-2">
+                    <button
+                      onClick={() => setResultsSubTab('summary')}
+                      className={`pb-2 px-1 text-[14px] font-extrabold cursor-pointer border-b-2 transition-all ${resultsSubTab === 'summary'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-[#8b97ab] hover:text-[#5a6a82]'}`}
+                    >
+                      종합 순위 집계
+                    </button>
+                    <button
+                      onClick={() => setResultsSubTab('judges')}
+                      className={`pb-2 px-1 text-[14px] font-extrabold cursor-pointer border-b-2 transition-all ${resultsSubTab === 'judges'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-[#8b97ab] hover:text-[#5a6a82]'}`}
+                    >
+                      심사위원별 결과 상세
+                    </button>
                   </div>
 
-                  {/* 매트릭스 테이블 */}
-                  <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-auto max-w-full shadow-sm">
-                    <table className="border-collapse border-spacing-0 w-full text-[13px]">
-                      <thead>
-                        <tr>
-                          <th className="sticky left-0 bg-[#1b2a4a] text-white p-3 font-extrabold text-center min-w-[90px] z-20">
-                            제품<br />분류코드
-                          </th>
-                          <th className="sticky left-[90px] bg-[#1b2a4a] text-white p-3 font-extrabold text-left min-w-[150px] z-10">
-                            제품명
-                          </th>
-                          {judges.map((j) => (
-                            <th key={j.id} className="bg-[#243a63] text-white p-3 font-semibold text-center min-w-[100px] whitespace-nowrap">
-                              {j.name}<br /><span className="text-[10px] text-textBlue font-normal">{j.affiliation}</span>
-                            </th>
-                          ))}
-                          <th className="bg-[#2f5a3a] text-white p-3 font-extrabold text-center min-w-[78px]">
-                            원점수합
-                          </th>
-                          <th className="bg-[#8a6a1e] text-white p-3 font-extrabold text-center min-w-[90px]">
-                            최종합계<br />(최고/최저 제외)
-                          </th>
-                          <th className="bg-[#1b2a4a] text-white p-3 font-extrabold text-center min-w-[64px]">
-                            순위
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {matrixList.map((m, idx) => {
-                          const rank = rankMap[m.code];
-                          return (
-                            <tr
-                              key={m.code}
-                              className="hover:bg-gray-50 border-b border-[#eef1f6] last:border-b-0"
-                              style={{ backgroundColor: idx % 2 === 1 ? '#fafbfd' : '#ffffff' }}
-                            >
-                              <td className="sticky left-0 bg-inherit p-3 text-center font-extrabold text-[#1b2a4a] z-10">
-                                {m.code}
-                              </td>
-                              <td className="sticky left-[90px] bg-inherit p-3 font-semibold text-[#3a475c] text-left z-10 truncate max-w-[180px]">
-                                {m.name}
-                              </td>
+                  {/* 1) 종합 순위 집계 탭 화면 */}
+                  {resultsSubTab === 'summary' && (
+                    <>
+                      <div>
+                        <div className="text-[15px] font-extrabold text-[#1b2a4a]">
+                          부문 집계 결과 매트릭스 ({activeResultBumanObject?.name})
+                        </div>
+                        <div className="text-[13px] text-[#8b97ab] mt-1">
+                          심사위원별 점수 · 최고( <span className="text-[#2f5488] font-bold">파랑</span> ) 및 최저( <span className="text-[#c0392b] font-bold">주황</span> ) 점수는 집계 신뢰도 확보를 위해 최종 합계 계산에서 제외됩니다.
+                        </div>
+                      </div>
 
-                              {/* 심사위원 개별 점수 */}
-                              {m.scores.map((sc, scIdx) => (
-                                <td
-                                  key={scIdx}
-                                  className={`p-3 text-center font-semibold border-l border-[#f2f4f8] ${sc.isMax
-                                    ? 'text-[#2f5488] bg-blue-50/70 font-bold'
-                                    : sc.isMin
-                                      ? 'text-[#c0392b] bg-red-50/70 font-bold'
-                                      : 'text-[#3a475c]'
-                                    }`}
-                                >
-                                  {sc.val}
-                                  {sc.isMax && <span className="block text-[9px] text-blue-500 font-extrabold leading-none mt-0.5">최고 제외</span>}
-                                  {sc.isMin && <span className="block text-[9px] text-red-500 font-extrabold leading-none mt-0.5">최저 제외</span>}
-                                </td>
+                      <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-auto max-w-full shadow-sm">
+                        <table className="border-collapse border-spacing-0 w-full text-[13px]">
+                          <thead>
+                            <tr>
+                              <th className="sticky left-0 bg-[#1b2a4a] text-white p-3 font-extrabold text-center min-w-[90px] z-20">
+                                제품<br />분류코드
+                              </th>
+                              <th className="sticky left-[90px] bg-[#1b2a4a] text-white p-3 font-extrabold text-left min-w-[150px] z-10">
+                                제품명
+                              </th>
+                              {judges.map((j) => (
+                                <th key={j.id} className="bg-[#243a63] text-white p-3 font-semibold text-center min-w-[100px] whitespace-nowrap">
+                                  {j.name}<br /><span className="text-[10px] text-textBlue font-normal">{j.affiliation}</span>
+                                </th>
                               ))}
-
-                              {/* 원점수합 */}
-                              <td className="p-3 text-center font-bold text-[#2f5a3a] bg-[#f1f7f1] border-l border-[#f2f4f8]">
-                                {m.total}
-                              </td>
-                              {/* 최종합계 */}
-                              <td className="p-3 text-center font-extrabold text-[16px] text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#f2f4f8]">
-                                {m.finalTotal}
-                              </td>
-                              {/* 순위 */}
-                              <td className="p-3 text-center bg-[#f4f6fb] border-l border-[#f2f4f8]">
-                                <span className={`inline-block w-6 h-6 rounded-full text-center leading-6 text-[12px] font-extrabold ${rank === 1
-                                  ? 'bg-[#d9b866] text-white'
-                                  : rank === 2
-                                    ? 'bg-gray-400 text-white'
-                                    : rank === 3
-                                      ? 'bg-[#b58a2e] text-white'
-                                      : 'bg-transparent text-[#5a6a82]'
-                                  }`}>
-                                  {rank}
-                                </span>
-                              </td>
+                              <th className="bg-[#2f5a3a] text-white p-3 font-extrabold text-center min-w-[78px]">
+                                원점수합
+                              </th>
+                              <th className="bg-[#8a6a1e] text-white p-3 font-extrabold text-center min-w-[90px]">
+                                최종합계<br />(최고/최저 제외)
+                              </th>
+                              <th className="bg-[#1b2a4a] text-white p-3 font-extrabold text-center min-w-[64px]">
+                                순위
+                              </th>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                          </thead>
+                          <tbody>
+                            {matrixList.map((m, idx) => {
+                              const rank = rankMap[m.code];
+                              return (
+                                <tr
+                                  key={m.code}
+                                  className="hover:bg-gray-50 border-b border-[#eef1f6] last:border-b-0"
+                                  style={{ backgroundColor: idx % 2 === 1 ? '#fafbfd' : '#ffffff' }}
+                                >
+                                  <td className="sticky left-0 bg-inherit p-3 text-center font-extrabold text-[#1b2a4a] z-10">
+                                    {m.code}
+                                  </td>
+                                  <td className="sticky left-[90px] bg-inherit p-3 font-semibold text-[#3a475c] text-left z-10 truncate max-w-[180px]">
+                                    {m.name}
+                                  </td>
+
+                                  {/* 심사위원 개별 점수 */}
+                                  {judges.map((j, jIdx) => {
+                                    // 이 심사위원의 해당 제품의 최종 환산 점수를 구함
+                                    const detailed = getJudgeDetailedScores(idx, jIdx, products[rbk][idx]);
+                                    const scoreVal = detailed.totalConverted;
+                                    
+                                    // 최고/최저 점수 마크 판정용 임시 탐색
+                                    const allScores = judges.map((_, tmpIdx) => getJudgeDetailedScores(idx, tmpIdx, products[rbk][idx]).totalConverted);
+                                    let isMin = false;
+                                    let isMax = false;
+                                    if (canTrim) {
+                                      const sorted = [...allScores].sort((a, b) => a - b);
+                                      const minVal = sorted[0];
+                                      const maxVal = sorted[sorted.length - 1];
+                                      const minIdx = allScores.indexOf(minVal);
+                                      const maxIdx = allScores.lastIndexOf(maxVal);
+                                      isMin = jIdx === minIdx;
+                                      isMax = jIdx === maxIdx;
+                                    }
+
+                                    return (
+                                      <td
+                                        key={jIdx}
+                                        className={`p-3 text-center font-semibold border-l border-[#f2f4f8] ${isMax
+                                          ? 'text-[#2f5488] bg-blue-50/70 font-bold'
+                                          : isMin
+                                            ? 'text-[#c0392b] bg-red-50/70 font-bold'
+                                            : 'text-[#3a475c]'
+                                          }`}
+                                      >
+                                        {scoreVal}
+                                        {isMax && <span className="block text-[9px] text-blue-500 font-extrabold leading-none mt-0.5">최고 제외</span>}
+                                        {isMin && <span className="block text-[9px] text-red-500 font-extrabold leading-none mt-0.5">최저 제외</span>}
+                                      </td>
+                                    );
+                                  })}
+
+                                  {/* 원점수합 */}
+                                  <td className="p-3 text-center font-bold text-[#2f5a3a] bg-[#f1f7f1] border-l border-[#f2f4f8]">
+                                    {m.total}
+                                  </td>
+                                  {/* 최종합계 */}
+                                  <td className="p-3 text-center font-extrabold text-[16px] text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#f2f4f8]">
+                                    {m.finalTotal}
+                                  </td>
+                                  {/* 순위 */}
+                                  <td className="p-3 text-center bg-[#f4f6fb] border-l border-[#f2f4f8]">
+                                    <span className={`inline-block w-6 h-6 rounded-full text-center leading-6 text-[12px] font-extrabold ${rank === 1
+                                      ? 'bg-[#d9b866] text-white'
+                                      : rank === 2
+                                        ? 'bg-gray-400 text-white'
+                                        : rank === 3
+                                          ? 'bg-[#b58a2e] text-white'
+                                          : 'bg-transparent text-[#5a6a82]'
+                                      }`}>
+                                      {rank}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
+                  {/* 2) 심사위원별 결과 상세 탭 화면 */}
+                  {resultsSubTab === 'judges' && (
+                    <>
+                      {/* 가로형 심사위원 셀렉터 단추 그룹 */}
+                      <div className="flex gap-1.5 flex-wrap items-center bg-[#f4f6fa] p-3 rounded-xl border border-[#dde3ec] max-w-[1100px]">
+                        <span className="text-[12px] font-extrabold text-[#5a6a82] mr-2">심사위원 필터:</span>
+                        {judges.map((j, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setSelectedResultJudgeIdx(idx)}
+                            className={`py-1.5 px-3.5 rounded-lg text-[13px] font-extrabold border transition-all cursor-pointer ${selectedResultJudgeIdx === idx
+                              ? 'bg-primary border-primary text-white shadow-sm'
+                              : 'bg-white border-[#cbd3e1] text-[#5a6a82] hover:bg-gray-50'}`}
+                          >
+                            {j.name} ({j.affiliation})
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* 심사위원 개별 시트 2단 헤더 테이블 */}
+                      <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-auto max-w-full shadow-sm">
+                        <table className="border-collapse border-spacing-0 w-full text-[13px]">
+                          <thead>
+                            {/* 1단 헤더 */}
+                            <tr className="bg-[#1b2a4a] text-white">
+                              <th colSpan="1" rowSpan="2" className="sticky left-0 bg-[#1b2a4a] text-white p-3.5 font-extrabold text-center min-w-[90px] border-r border-[#243a63] z-20">
+                                제품<br />분류코드
+                              </th>
+                              <th colSpan="1" rowSpan="2" className="sticky left-[90px] bg-[#1b2a4a] text-white p-3.5 font-extrabold text-left min-w-[150px] border-r border-[#243a63] z-10">
+                                제품명
+                              </th>
+                              
+                              {/* 템플릿의 각 그룹 */}
+                              {matchTemplate && matchTemplate.groups && matchTemplate.groups.map(g => {
+                                const gItems = g.items || [];
+                                return (
+                                  <React.Fragment key={g.id}>
+                                    {gItems.length > 0 && (
+                                      <th colSpan={gItems.length} className="bg-[#243a63] text-white p-2 font-extrabold text-center border-r border-[#314a7c] border-b border-[#314a7c]">
+                                        {g.name}
+                                      </th>
+                                    )}
+                                    <th colSpan="1" rowSpan="2" className="bg-[#1f4a38] text-white p-2.5 font-extrabold text-center border-r border-[#285d47] min-w-[70px]">
+                                      배점합계
+                                    </th>
+                                    <th colSpan="1" rowSpan="2" className="bg-[#8a6a1e] text-white p-2.5 font-extrabold text-center border-r border-[#9b7b2b] min-w-[70px]">
+                                      환산점수
+                                    </th>
+                                  </React.Fragment>
+                                );
+                              })}
+                              
+                              {/* 최종 합산 */}
+                              <th colSpan="1" rowSpan="2" className="bg-[#284c7d] text-white p-2.5 font-extrabold text-center border-r border-[#315b94] min-w-[75px]">
+                                배점합계
+                              </th>
+                              <th colSpan="1" rowSpan="2" className="bg-[#8a6a1e] text-white p-2.5 font-extrabold text-center border-r border-[#9b7b2b] min-w-[75px]">
+                                환산점수
+                              </th>
+                              <th colSpan="1" rowSpan="2" className="bg-[#1b2a4a] text-white p-2.5 font-extrabold text-center border-r border-[#243a63] min-w-[100px]">
+                                최종환산합계
+                              </th>
+                              <th colSpan="1" rowSpan="2" className="bg-[#c0392b] text-white p-2.5 font-extrabold text-center min-w-[60px]">
+                                순위
+                              </th>
+                            </tr>
+                            
+                            {/* 2단 헤더 (세부 항목명) */}
+                            <tr className="bg-[#243a63] text-white text-[11px] border-b border-[#243a63]">
+                              {matchTemplate && matchTemplate.groups && matchTemplate.groups.map(g => (
+                                (g.items || []).map(it => (
+                                  <th key={it.id} className="p-2 font-bold text-center border-r border-[#344f82] min-w-[80px] bg-[#2a4372]">
+                                    {it.name}
+                                  </th>
+                                ))
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {judgeSheets[selectedResultJudgeIdx]?.rows.map((r, rIdx) => {
+                              return (
+                                <tr
+                                  key={r.code}
+                                  className="hover:bg-gray-50 border-b border-[#eef1f6] last:border-b-0"
+                                  style={{ backgroundColor: rIdx % 2 === 1 ? '#fafbfd' : '#ffffff' }}
+                                >
+                                  <td className="sticky left-0 bg-inherit p-3.5 text-center font-extrabold text-[#1b2a4a] z-10">
+                                    {r.code}
+                                  </td>
+                                  <td className="sticky left-[90px] bg-inherit p-3.5 font-semibold text-[#3a475c] text-left z-10 truncate max-w-[150px]">
+                                    {r.name}
+                                  </td>
+                                  
+                                  {/* 각 그룹별 세부 점수 및 배점합/환산점수 */}
+                                  {matchTemplate && matchTemplate.groups && matchTemplate.groups.map(g => {
+                                    const gItems = g.items || [];
+                                    const gScore = r.detailed.groupScores.find(gs => gs.groupId === g.id);
+                                    
+                                    return (
+                                      <React.Fragment key={g.id}>
+                                        {gItems.map(it => (
+                                          <td key={it.id} className="p-3 text-center border-l border-[#f2f4f8] text-primary font-semibold">
+                                            {r.detailed.itemScores[it.id] || 0}
+                                          </td>
+                                        ))}
+                                        {/* 배점합계 */}
+                                        <td className="p-3 text-center font-bold text-[#1f4a38] bg-[#f1f7f1] border-l border-[#eef1f6]">
+                                          {gScore ? gScore.rawSum : 0}
+                                        </td>
+                                        {/* 환산점수 */}
+                                        <td className="p-3 text-center font-extrabold text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#eef1f6]">
+                                          {gScore ? gScore.converted : 0}
+                                        </td>
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                  
+                                  {/* 최종합계 내역 */}
+                                  {/* 최종 배점합 */}
+                                  <td className="p-3 text-center font-bold text-[#284c7d] bg-[#f0f4fa] border-l border-[#eef1f6]">
+                                    {r.detailed.totalRaw}
+                                  </td>
+                                  {/* 최종 환산점수 */}
+                                  <td className="p-3 text-center font-extrabold text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#eef1f6]">
+                                    {r.detailed.totalConverted}
+                                  </td>
+                                  {/* 최종 환산 합계 */}
+                                  <td className="p-3 text-center font-extrabold text-[15px] text-[#1b2a4a] bg-[#eaeffa] border-l border-[#eef1f6]">
+                                    {r.detailed.totalConverted}
+                                  </td>
+                                  {/* 로컬 순위 */}
+                                  <td className="p-3 text-center bg-[#f4f6fb] border-l border-[#eef1f6]">
+                                    <span className={`inline-block w-5 h-5 rounded-full text-center leading-5 text-[11px] font-extrabold ${r.rank === 1
+                                      ? 'bg-[#d9b866] text-white'
+                                      : r.rank === 2
+                                        ? 'bg-gray-400 text-white'
+                                        : r.rank === 3
+                                          ? 'bg-[#b58a2e] text-white'
+                                          : 'bg-transparent text-[#5a6a82]'
+                                      }`}>
+                                      {r.rank}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
 
                   {/* 제어 하단 버튼 */}
                   <div className="flex gap-3 max-w-[1100px]">
                     <button
                       onClick={() => {
-                        const headers = ["제품분류코드", "제품명", ...judges.map(j => `${j.name}(${j.affiliation})`), "최종합계", "순위"];
-                        const rows = matrixList.map(m => [
-                          m.code,
-                          m.name,
-                          ...m.scores.map(s => s.val),
-                          m.finalTotal,
-                          rankMap[m.code]
-                        ]);
-                        console.log("관리자 집계 내역 다운로드:", { headers, rows });
-                        showToast('엑셀 다운로드 프로세스가 콘솔 로그에 기록되었습니다.');
+                        try {
+                          const wb = XLSX.utils.book_new();
+
+                          // 1. 종합 순위 집계 시트 작성
+                          const summaryHeaders = ["제품분류코드", "제품명", ...judges.map(j => `${j.name}(${j.affiliation})`), "원점수합", "최종합계", "순위"];
+                          const summaryRows = matrixList.map((m, mIdx) => {
+                            const scoresList = judges.map((_, jIdx) => {
+                              return getJudgeDetailedScores(mIdx, jIdx, products[rbk][mIdx]).totalConverted;
+                            });
+                            return [
+                              m.code,
+                              m.name,
+                              ...scoresList,
+                              m.total,
+                              m.finalTotal,
+                              rankMap[m.code]
+                            ];
+                          });
+                          const summaryData = [summaryHeaders, ...summaryRows];
+                          const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+                          XLSX.utils.book_append_sheet(wb, wsSummary, "종합 순위 집계");
+
+                          // 2. 심사위원별 개별 시트 작성
+                          judgeSheets.forEach((sheet) => {
+                            const row1 = ["제품분류코드", "제품명"];
+                            const row2 = ["", ""];
+                            
+                            if (matchTemplate && matchTemplate.groups) {
+                              matchTemplate.groups.forEach((g) => {
+                                const gItems = g.items || [];
+                                if (gItems.length > 0) {
+                                  row1.push(g.name);
+                                  for (let i = 1; i < gItems.length; i++) {
+                                    row1.push("");
+                                  }
+                                  gItems.forEach(it => {
+                                    row2.push(it.name);
+                                  });
+                                }
+                                row1.push("배점합계", "환산점수");
+                                row2.push("", "");
+                              });
+                            }
+                            row1.push("배점합계", "환산점수", "최종환산합계", "순위");
+                            row2.push("", "", "", "");
+
+                            const sheetRows = [row1, row2];
+
+                            sheet.rows.forEach((r) => {
+                              const dataRow = [r.code, r.name];
+                              
+                              if (matchTemplate && matchTemplate.groups) {
+                                matchTemplate.groups.forEach((g) => {
+                                  const gItems = g.items || [];
+                                  gItems.forEach(it => {
+                                    dataRow.push(r.detailed.itemScores[it.id] || 0);
+                                  });
+                                  const gScore = r.detailed.groupScores.find(gs => gs.groupId === g.id);
+                                  dataRow.push(gScore ? gScore.rawSum : 0);
+                                  dataRow.push(gScore ? gScore.converted : 0);
+                                });
+                              }
+                              
+                              dataRow.push(
+                                r.detailed.totalRaw,
+                                r.detailed.totalConverted,
+                                r.detailed.totalConverted,
+                                r.rank
+                              );
+                              sheetRows.push(dataRow);
+                            });
+
+                            const wsJudge = XLSX.utils.aoa_to_sheet(sheetRows);
+                            const safeSheetName = sheet.judgeName.substring(0, 25) + " 평가";
+                            XLSX.utils.book_append_sheet(wb, wsJudge, safeSheetName);
+                          });
+
+                          XLSX.writeFile(wb, `KRiceFesta_${rbk}_부문_심사집계결과.xlsx`);
+                          showToast('다중 시트 엑셀 파일이 정상 다운로드되었습니다.');
+                        } catch (err) {
+                          console.error("엑셀 내보내기 실패:", err);
+                          showToast('엑셀 생성 중 오류가 발생했습니다.');
+                        }
                       }}
-                      className="h-[48px] px-6 border border-[#cbd3e1] bg-white text-[#3a475c] rounded-[10px] text-[14px] font-bold cursor-pointer hover:bg-gray-50 transition-all"
+                      className="h-[48px] px-6 border border-[#cbd3e1] bg-white text-[#3a475c] rounded-[10px] text-[14px] font-bold cursor-pointer hover:bg-gray-50 transition-all shadow-sm"
                     >
                       엑셀 내려받기
                     </button>
                     <button
                       onClick={handlePublish}
-                      className="h-[48px] px-6 border-none bg-primary text-white rounded-[10px] text-[14px] font-extrabold cursor-pointer hover:bg-secondary transition-all"
+                      className="h-[48px] px-6 border-none bg-primary text-white rounded-[10px] text-[14px] font-extrabold cursor-pointer hover:bg-secondary transition-all shadow-sm"
                     >
                       결과 확정·공표
                     </button>
