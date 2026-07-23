@@ -1158,7 +1158,7 @@ function App() {
                         />
                       </div>
                       <div className="p-1.5">
-                        <span className={`inline-flex items-center justify-center min-w-[76px] h-[26px] px-2.5 rounded-full text-[12px] font-extrabold transition-all ${badgeStyle}`}>
+                        <span className={`inline-flex items-center justify-center min-w-[76px] h-[26px] px-2.5 rounded-[6px] text-[12px] font-extrabold transition-all ${badgeStyle}`}>
                           {prodLen}개 제품
                         </span>
                       </div>
