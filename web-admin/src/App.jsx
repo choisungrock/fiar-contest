@@ -1162,8 +1162,10 @@ function App() {
                         draggedIdx === idx ? 'opacity-40 bg-[#f4f6fa]/70 border-dashed border-primary/20' : 'bg-white'
                       }`}
                     >
-                      <div className="p-3 text-center font-bold text-[#8b97ab] cursor-grab active:cursor-grabbing flex items-center justify-center gap-1" title="드래그하여 순서 변경">
-                        <span className="text-[14px] text-gray-400 font-normal">☰</span>
+                      <div className="p-3 text-center font-bold text-[#8b97ab] cursor-grab active:cursor-grabbing flex items-center justify-center gap-1.5" title="드래그하여 순서 변경">
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-400">
+                          <path d="M2.5 12h11v-1.5h-11V12zm0-3.25h11v-1.5h-11v1.5zm0-4.75v1.5h11v-1.5h-11z" fill="currentColor" />
+                        </svg>
                         <span>{idx + 1}</span>
                       </div>
                       <div className="p-1.5">
