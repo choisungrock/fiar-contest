@@ -1934,80 +1934,46 @@ function App() {
                 };
               };
 
-              // 각 제품별 평가항목 최고/최저 제외 평균 매트릭스 데이터 생성 (종합 순위 집계용)
+              // 각 제품별 심사위원 채점 매트릭스 데이터 생성
               const matrixList = (products[rbk] || []).map((p, pIdx) => {
-                const judgesDetailedList = judges.map((_, jIdx) => {
-                  return getJudgeDetailedScores(pIdx, jIdx, p);
+                const listScores = judges.map((j, jIdx) => {
+                  return getJudgeDetailedScores(pIdx, jIdx, p).totalConverted;
                 });
 
-                const summaryItemScores = {};
-                const summaryGroupScores = [];
-                let totalRawScore = 0;
-                let totalConvertedScore = 0;
+                // 합계 연산
+                const rawTotal = listScores.reduce((sum, v) => sum + v, 0);
 
-                if (matchTemplate && matchTemplate.groups) {
-                  matchTemplate.groups.forEach((g) => {
-                    let groupRawSum = 0;
-                    const gItems = g.items || [];
-                    
-                    gItems.forEach((it) => {
-                      const itScores = judgesDetailedList.map(d => d.itemScores[it.id] || 0);
-                      let averageVal = 0;
-                      if (canTrim && itScores.length >= 3) {
-                        const sorted = [...itScores].sort((a, b) => a - b);
-                        sorted.shift(); // 최저 제외
-                        sorted.pop();   // 최고 제외
-                        const trimSum = sorted.reduce((sum, v) => sum + v, 0);
-                        averageVal = Math.round((trimSum / sorted.length) * 10) / 10;
-                      } else {
-                        const totalSum = itScores.reduce((sum, v) => sum + v, 0);
-                        averageVal = Math.round((totalSum / itScores.length) * 10) / 10;
-                      }
-                      summaryItemScores[it.id] = averageVal;
-                      groupRawSum += averageVal;
-                    });
-                    
-                    const gMaxRaw = gItems.reduce((sum, it) => sum + (parseInt(it.max) || 0), 0);
-                    const gConvertTo = parseInt(g.convertTo) || 0;
-                    
-                    let gConverted = groupRawSum;
-                    if (gConvertTo > 0 && gMaxRaw > 0) {
-                      gConverted = Math.round((groupRawSum / gMaxRaw) * gConvertTo * 10) / 10;
-                    }
-                    
-                    totalRawScore += groupRawSum;
-                    totalConvertedScore += gConverted;
-                    
-                    summaryGroupScores.push({
-                      groupId: g.id,
-                      rawSum: Math.round(groupRawSum * 10) / 10,
-                      converted: gConverted
-                    });
-                  });
-                } else {
-                  // 폴백
-                  const listScores = judges.map((_, jIdx) => getJudgeDetailedScores(pIdx, jIdx, p).totalConverted);
-                  const rawTotal = listScores.reduce((sum, v) => sum + v, 0);
-                  let finalTotal = rawTotal;
-                  if (canTrim && listScores.length >= 3) {
-                    const sorted = [...listScores].sort((a, b) => a - b);
-                    finalTotal = rawTotal - sorted[0] - sorted[sorted.length - 1];
-                  }
-                  totalConvertedScore = finalTotal;
+                // 최고/최저 제외 연산
+                let finalTotal = rawTotal;
+                let minIdx = -1;
+                let maxIdx = -1;
+
+                if (canTrim) {
+                  const sorted = [...listScores].sort((a, b) => a - b);
+                  const minVal = sorted[0];
+                  const maxVal = sorted[sorted.length - 1];
+
+                  minIdx = listScores.indexOf(minVal);
+                  maxIdx = listScores.lastIndexOf(maxVal); // 동일 점수 시 분리
+
+                  finalTotal = rawTotal - minVal - maxVal;
                 }
 
                 return {
                   code: p.code,
                   name: isBlind ? '블라인드 제품' : p.name,
-                  summaryItemScores,
-                  summaryGroupScores,
-                  totalRaw: Math.round(totalRawScore * 10) / 10,
-                  totalConverted: Math.round(totalConvertedScore * 10) / 10
+                  scores: listScores.map((v, idx) => ({
+                    val: v,
+                    isMin: idx === minIdx && canTrim,
+                    isMax: idx === maxIdx && canTrim
+                  })),
+                  total: rawTotal,
+                  finalTotal
                 };
               });
 
               // 최종 순위 산출
-              const sortedByFinal = [...matrixList].sort((a, b) => b.totalConverted - a.totalConverted);
+              const sortedByFinal = [...matrixList].sort((a, b) => b.finalTotal - a.finalTotal);
               const rankMap = {};
               sortedByFinal.forEach((item, idx) => {
                 rankMap[item.code] = idx + 1;
@@ -2075,13 +2041,13 @@ function App() {
                     <div className="bg-white border border-[#e5e9f0] rounded-[14px] p-[18px] px-5">
                       <div className="text-[12px] text-[#8b97ab] font-semibold">최고 합계 점수</div>
                       <div className="mt-1.5 text-[28px] font-extrabold text-[#284c7d] leading-none">
-                        {matrixList.length > 0 ? Math.max(...matrixList.map(m => m.totalConverted)) : 0}점
+                        {matrixList.length > 0 ? Math.max(...matrixList.map(m => m.finalTotal)) : 0}점
                       </div>
                     </div>
                     <div className="bg-white border border-[#e5e9f0] rounded-[14px] p-[18px] px-5">
                       <div className="text-[12px] text-[#8b97ab] font-semibold">최저 합계 점수</div>
                       <div className="mt-1.5 text-[28px] font-extrabold text-[#c0392b] leading-none">
-                        {matrixList.length > 0 ? Math.min(...matrixList.map(m => m.totalConverted)) : 0}점
+                        {matrixList.length > 0 ? Math.min(...matrixList.map(m => m.finalTotal)) : 0}점
                       </div>
                     </div>
                   </div>
@@ -2114,66 +2080,34 @@ function App() {
                           부문 집계 결과 매트릭스 ({activeResultBumanObject?.name})
                         </div>
                         <div className="text-[13px] text-[#8b97ab] mt-1">
-                          각 세부 항목 점수는 신뢰도 확보를 위해 **심사위원별 점수 중 최고점(1개)과 최저점(1개)을 제외한 평균값**으로 계산됩니다.
+                          심사위원별 점수 · 최고( <span className="text-[#2f5488] font-bold">파랑</span> ) 및 최저( <span className="text-[#c0392b] font-bold">주황</span> ) 점수는 집계 신뢰도 확보를 위해 최종 합계 계산에서 제외됩니다.
                         </div>
                       </div>
 
                       <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-auto max-w-full shadow-sm">
                         <table className="border-collapse border-spacing-0 w-full text-[13px]">
                           <thead>
-                            {/* 1단 헤더 */}
-                            <tr className="bg-[#1b2a4a] text-white">
-                              <th colSpan="1" rowSpan="2" className="sticky left-0 bg-[#1b2a4a] text-white p-3.5 font-extrabold text-center min-w-[90px] border-r border-[#243a63] z-20">
+                            <tr>
+                              <th className="sticky left-0 bg-[#1b2a4a] text-white p-3 font-extrabold text-center min-w-[90px] z-20">
                                 제품<br />분류코드
                               </th>
-                              <th colSpan="1" rowSpan="2" className="sticky left-[90px] bg-[#1b2a4a] text-white p-3.5 font-extrabold text-left min-w-[150px] border-r border-[#243a63] z-10">
+                              <th className="sticky left-[90px] bg-[#1b2a4a] text-white p-3 font-extrabold text-left min-w-[150px] z-10">
                                 제품명
                               </th>
-                              
-                              {/* 템플릿의 각 그룹 */}
-                              {matchTemplate && matchTemplate.groups && matchTemplate.groups.map(g => {
-                                const gItems = g.items || [];
-                                return (
-                                  <React.Fragment key={g.id}>
-                                    {gItems.length > 0 && (
-                                      <th colSpan={gItems.length} className="bg-[#243a63] text-white p-2 font-extrabold text-center border-r border-[#314a7c] border-b border-[#314a7c]">
-                                        {g.name}
-                                      </th>
-                                    )}
-                                    <th colSpan="1" rowSpan="2" className="bg-[#1f4a38] text-white p-2.5 font-extrabold text-center border-r border-[#285d47] min-w-[70px]">
-                                      배점합계
-                                    </th>
-                                    <th colSpan="1" rowSpan="2" className="bg-[#8a6a1e] text-white p-2.5 font-extrabold text-center border-r border-[#9b7b2b] min-w-[70px]">
-                                      환산점수
-                                    </th>
-                                  </React.Fragment>
-                                );
-                              })}
-                              
-                              {/* 최종 합산 */}
-                              <th colSpan="1" rowSpan="2" className="bg-[#284c7d] text-white p-2.5 font-extrabold text-center border-r border-[#315b94] min-w-[75px]">
-                                배점합계
+                              {judges.map((j) => (
+                                <th key={j.id} className="bg-[#243a63] text-white p-3 font-semibold text-center min-w-[100px] whitespace-nowrap">
+                                  {j.name}<br /><span className="text-[10px] text-textBlue font-normal">{j.affiliation}</span>
+                                </th>
+                              ))}
+                              <th className="bg-[#2f5a3a] text-white p-3 font-extrabold text-center min-w-[78px]">
+                                원점수합
                               </th>
-                              <th colSpan="1" rowSpan="2" className="bg-[#8a6a1e] text-white p-2.5 font-extrabold text-center border-r border-[#9b7b2b] min-w-[75px]">
-                                환산점수
+                              <th className="bg-[#8a6a1e] text-white p-3 font-extrabold text-center min-w-[90px]">
+                                최종합계<br />(최고/최저 제외)
                               </th>
-                              <th colSpan="1" rowSpan="2" className="bg-[#1b2a4a] text-white p-2.5 font-extrabold text-center border-r border-[#243a63] min-w-[100px]">
-                                최종환산합계
-                              </th>
-                              <th colSpan="1" rowSpan="2" className="bg-[#c0392b] text-white p-2.5 font-extrabold text-center min-w-[60px]">
+                              <th className="bg-[#1b2a4a] text-white p-3 font-extrabold text-center min-w-[64px]">
                                 순위
                               </th>
-                            </tr>
-                            
-                            {/* 2단 헤더 (세부 항목명) */}
-                            <tr className="bg-[#243a63] text-white text-[11px] border-b border-[#243a63]">
-                              {matchTemplate && matchTemplate.groups && matchTemplate.groups.map(g => (
-                                (g.items || []).map(it => (
-                                  <th key={it.id} className="p-2 font-bold text-center border-r border-[#344f82] min-w-[80px] bg-[#2a4372]">
-                                    {it.name}
-                                  </th>
-                                ))
-                              ))}
                             </tr>
                           </thead>
                           <tbody>
@@ -2185,53 +2119,61 @@ function App() {
                                   className="hover:bg-gray-50 border-b border-[#eef1f6] last:border-b-0"
                                   style={{ backgroundColor: idx % 2 === 1 ? '#fafbfd' : '#ffffff' }}
                                 >
-                                  <td className="sticky left-0 bg-inherit p-3.5 text-center font-extrabold text-[#1b2a4a] z-10">
+                                  <td className="sticky left-0 bg-inherit p-3 text-center font-extrabold text-[#1b2a4a] z-10">
                                     {m.code}
                                   </td>
-                                  <td className="sticky left-[90px] bg-inherit p-3.5 font-semibold text-[#3a475c] text-left z-10 truncate max-w-[150px]">
+                                  <td className="sticky left-[90px] bg-inherit p-3 font-semibold text-[#3a475c] text-left z-10 truncate max-w-[180px]">
                                     {m.name}
                                   </td>
-                                  
-                                  {/* 각 그룹별 제외 평균점수 및 배점합/환산점수 */}
-                                  {matchTemplate && matchTemplate.groups && matchTemplate.groups.map(g => {
-                                    const gItems = g.items || [];
-                                    const gScore = m.summaryGroupScores.find(gs => gs.groupId === g.id);
+
+                                  {/* 심사위원 개별 점수 */}
+                                  {judges.map((j, jIdx) => {
+                                    // 이 심사위원의 해당 제품의 최종 환산 점수를 구함
+                                    const detailed = getJudgeDetailedScores(idx, jIdx, products[rbk][idx]);
+                                    const scoreVal = detailed.totalConverted;
                                     
+                                    // 최고/최저 점수 마크 판정용 임시 탐색
+                                    const allScores = judges.map((_, tmpIdx) => getJudgeDetailedScores(idx, tmpIdx, products[rbk][idx]).totalConverted);
+                                    let isMin = false;
+                                    let isMax = false;
+                                    if (canTrim) {
+                                      const sorted = [...allScores].sort((a, b) => a - b);
+                                      const minVal = sorted[0];
+                                      const maxVal = sorted[sorted.length - 1];
+                                      const minIdx = allScores.indexOf(minVal);
+                                      const maxIdx = allScores.lastIndexOf(maxVal);
+                                      isMin = jIdx === minIdx;
+                                      isMax = jIdx === maxIdx;
+                                    }
+
                                     return (
-                                      <React.Fragment key={g.id}>
-                                        {gItems.map(it => (
-                                          <td key={it.id} className="p-3 text-center border-l border-[#f2f4f8] text-primary font-bold">
-                                            {m.summaryItemScores[it.id] !== undefined ? m.summaryItemScores[it.id] : '-'}
-                                          </td>
-                                        ))}
-                                        {/* 배점합계 */}
-                                        <td className="p-3 text-center font-bold text-[#1f4a38] bg-[#f1f7f1] border-l border-[#eef1f6]">
-                                          {gScore ? gScore.rawSum : 0}
-                                        </td>
-                                        {/* 환산점수 */}
-                                        <td className="p-3 text-center font-extrabold text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#eef1f6]">
-                                          {gScore ? gScore.converted : 0}
-                                        </td>
-                                      </React.Fragment>
+                                      <td
+                                        key={jIdx}
+                                        className={`p-3 text-center font-semibold border-l border-[#f2f4f8] ${isMax
+                                          ? 'text-[#2f5488] bg-blue-50/70 font-bold'
+                                          : isMin
+                                            ? 'text-[#c0392b] bg-red-50/70 font-bold'
+                                            : 'text-[#3a475c]'
+                                          }`}
+                                      >
+                                        {scoreVal}
+                                        {isMax && <span className="block text-[9px] text-blue-500 font-extrabold leading-none mt-0.5">최고 제외</span>}
+                                        {isMin && <span className="block text-[9px] text-red-500 font-extrabold leading-none mt-0.5">최저 제외</span>}
+                                      </td>
                                     );
                                   })}
-                                  
-                                  {/* 최종합계 내역 */}
-                                  {/* 최종 배점합 */}
-                                  <td className="p-3 text-center font-bold text-[#284c7d] bg-[#f0f4fa] border-l border-[#eef1f6]">
-                                    {m.totalRaw}
+
+                                  {/* 원점수합 */}
+                                  <td className="p-3 text-center font-bold text-[#2f5a3a] bg-[#f1f7f1] border-l border-[#f2f4f8]">
+                                    {m.total}
                                   </td>
-                                  {/* 최종 환산점수 */}
-                                  <td className="p-3 text-center font-extrabold text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#eef1f6]">
-                                    {m.totalConverted}
-                                  </td>
-                                  {/* 최종 환산 합계 */}
-                                  <td className="p-3 text-center font-extrabold text-[15px] text-[#1b2a4a] bg-[#eaeffa] border-l border-[#eef1f6]">
-                                    {m.totalConverted}
+                                  {/* 최종합계 */}
+                                  <td className="p-3 text-center font-extrabold text-[16px] text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#f2f4f8]">
+                                    {m.finalTotal}
                                   </td>
                                   {/* 순위 */}
-                                  <td className="p-3 text-center bg-[#f4f6fb] border-l border-[#eef1f6]">
-                                    <span className={`inline-block w-5 h-5 rounded-full text-center leading-5 text-[11px] font-extrabold ${rank === 1
+                                  <td className="p-3 text-center bg-[#f4f6fb] border-l border-[#f2f4f8]">
+                                    <span className={`inline-block w-6 h-6 rounded-full text-center leading-6 text-[12px] font-extrabold ${rank === 1
                                       ? 'bg-[#d9b866] text-white'
                                       : rank === 2
                                         ? 'bg-gray-400 text-white'
@@ -2410,56 +2352,23 @@ function App() {
                         try {
                           const wb = XLSX.utils.book_new();
 
-                          // 1. 종합 순위 집계 시트 작성 (2단 헤더 및 제외 평균점수 기입)
-                          const summaryRow1 = ["제품분류코드", "제품명"];
-                          const summaryRow2 = ["", ""];
-                          
-                          if (matchTemplate && matchTemplate.groups) {
-                            matchTemplate.groups.forEach((g) => {
-                              const gItems = g.items || [];
-                              if (gItems.length > 0) {
-                                summaryRow1.push(g.name);
-                                for (let i = 1; i < gItems.length; i++) {
-                                  summaryRow1.push("");
-                                }
-                                gItems.forEach(it => {
-                                  summaryRow2.push(it.name);
-                                });
-                              }
-                              summaryRow1.push("배점합계", "환산점수");
-                              summaryRow2.push("", "");
+                          // 1. 종합 순위 집계 시트 작성
+                          const summaryHeaders = ["제품분류코드", "제품명", ...judges.map(j => `${j.name}(${j.affiliation})`), "원점수합", "최종합계", "순위"];
+                          const summaryRows = matrixList.map((m, mIdx) => {
+                            const scoresList = judges.map((_, jIdx) => {
+                              return getJudgeDetailedScores(mIdx, jIdx, products[rbk][mIdx]).totalConverted;
                             });
-                          }
-                          summaryRow1.push("배점합계", "환산점수", "최종환산합계", "순위");
-                          summaryRow2.push("", "", "", "");
-
-                          const summarySheetRows = [summaryRow1, summaryRow2];
-
-                          matrixList.forEach((m) => {
-                            const dataRow = [m.code, m.name];
-                            
-                            if (matchTemplate && matchTemplate.groups) {
-                              matchTemplate.groups.forEach((g) => {
-                                const gItems = g.items || [];
-                                gItems.forEach(it => {
-                                  dataRow.push(m.summaryItemScores[it.id] || 0);
-                                });
-                                const gScore = m.summaryGroupScores.find(gs => gs.groupId === g.id);
-                                dataRow.push(gScore ? gScore.rawSum : 0);
-                                dataRow.push(gScore ? gScore.converted : 0);
-                              });
-                            }
-                            
-                            dataRow.push(
-                              m.totalRaw,
-                              m.totalConverted,
-                              m.totalConverted,
+                            return [
+                              m.code,
+                              m.name,
+                              ...scoresList,
+                              m.total,
+                              m.finalTotal,
                               rankMap[m.code]
-                            );
-                            summarySheetRows.push(dataRow);
+                            ];
                           });
-
-                          const wsSummary = XLSX.utils.aoa_to_sheet(summarySheetRows);
+                          const summaryData = [summaryHeaders, ...summaryRows];
+                          const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
                           XLSX.utils.book_append_sheet(wb, wsSummary, "종합 순위 집계");
 
                           // 2. 심사위원별 개별 시트 작성
