@@ -1264,13 +1264,11 @@ function App() {
                 <div className="grid grid-cols-[56px_160px_1.6fr_80px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
                   <div className="p-3 text-center">No.</div>
                   <div className="p-3">제품 분류코드</div>
-                  <div className="p-3">제품명 {(activeBumanObject?.cat === 'blind' || activeBumanObject?.type === 'blind') ? '(블라인드 비공개)' : ''}</div>
+                  <div className="p-3">제품명</div>
                   <div className="p-3 text-center">삭제</div>
                 </div>
 
                 {(products[productBuman] || []).map((p, idx) => {
-                  const isBlind = activeBumanObject?.cat === 'blind' || activeBumanObject?.type === 'blind';
-
                   return (
                     <div key={p.id} className="grid grid-cols-[56px_160px_1.6fr_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0">
                       <div className="p-3 text-center font-bold text-[#8b97ab]">{idx + 1}</div>
@@ -1288,17 +1286,13 @@ function App() {
                       <div className="p-1.5">
                         <input
                           type="text"
-                          value={isBlind ? '' : p.name}
-                          disabled={isBlind}
+                          value={p.name || ''}
                           onChange={(e) => {
                             const next = (products[productBuman] || []).map(x => x.id === p.id ? { ...x, name: e.target.value } : x);
                             setProducts({ ...products, [productBuman]: next });
                           }}
-                          placeholder={isBlind ? '블라인드 — 코드만 노출' : '제품명 입력'}
-                          className={`w-full h-10 border rounded-lg px-3 text-[14px] ${isBlind
-                              ? 'border-dashed border-[#dde3ec] bg-[#f7f8fb] text-[#a7b1c2] cursor-not-allowed'
-                              : 'border-[#dde3ec] bg-white font-semibold text-primary'
-                            }`}
+                          placeholder="제품명 입력"
+                          className="w-full h-10 border border-[#dde3ec] bg-white font-semibold text-primary rounded-lg px-3 text-[14px]"
                         />
                       </div>
                       <div className="p-1.5 text-center">
