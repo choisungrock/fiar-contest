@@ -183,6 +183,31 @@ function App() {
     }
   }, [isAuthed]);
 
+  // 특정 품평회 상세 정보 로딩 API 연동 함수
+  const fetchGroupDetails = async (groupId) => {
+    try {
+      const response = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/details`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === "success") {
+          setSystemName(data.systemName);
+          setJudges(data.judges);
+          setBumans(data.bumans);
+          setProducts(data.products);
+          setTemplates(data.templates);
+        }
+      }
+    } catch (e) {
+      console.error("상세 정보 API 호출 실패:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthed && view === 'console' && activeGroup) {
+      fetchGroupDetails(activeGroup);
+    }
+  }, [isAuthed, view, activeGroup]);
+
   // 전체 데이터 로컬 스토리지 보관 헬퍼
   const saveState = (patch) => {
     try {
@@ -410,9 +435,34 @@ function App() {
   };
 
   // 변경사항 저장 토스트 노출
-  const handleSaveAll = () => {
+  const handleSaveAll = async () => {
     saveState({ groups, systemName, judges, bumans, products, templates });
-    showToast('모든 설정 변경 사항이 데이터베이스에 자동 반영 및 저장되었습니다.');
+    
+    try {
+      const response = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemName,
+          period: groups.find(g => g.id === activeGroup)?.period || "",
+          status: groups.find(g => g.id === activeGroup)?.status || "준비중",
+          judges,
+          bumans,
+          products,
+          templates
+        })
+      });
+
+      if (response.ok) {
+        showToast('모든 설정 변경 사항이 데이터베이스에 자동 반영 및 저장되었습니다.');
+        fetchGroups();
+      } else {
+        alert("데이터베이스 저장에 실패하였습니다.");
+      }
+    } catch (e) {
+      console.error("데이터베이스 저장 중 에러:", e);
+      showToast('모든 설정 변경 사항이 로컬 스토리지에 동기화 저장되었습니다.');
+    }
   };
 
   // 통계 계산

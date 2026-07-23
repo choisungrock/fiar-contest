@@ -109,6 +109,281 @@ def create_group(req: CreateGroupRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"대그룹 추가 중 오류 발생: {str(e)}")
 
+class JudgeItem(BaseModel):
+    id: int = None
+    name: str
+    affiliation: str = ""
+    role: str = "심사위원"
+
+class BumanItem(BaseModel):
+    id: int = None
+    prefix: str
+    name: str
+    type: str
+
+class ProductItem(BaseModel):
+    id: int = None
+    code: str
+    name: str
+
+class EvalItem(BaseModel):
+    id: int = None
+    name: str
+    max: int
+
+class EvalGroup(BaseModel):
+    id: int = None
+    name: str
+    convertTo: str = ""
+    items: list[EvalItem]
+
+class TemplatesMap(BaseModel):
+    open: list[EvalGroup]
+    blind: list[EvalGroup]
+
+class SaveDetailsRequest(BaseModel):
+    systemName: str
+    period: str = ""
+    status: str = "진행중"
+    judges: list[JudgeItem]
+    bumans: list[BumanItem]
+    products: dict[str, list[ProductItem]]
+    templates: TemplatesMap
+
+@router.get("/groups/{fg_id}/details")
+def get_group_details(fg_id: int):
+    """대그룹(품평회 대회) 상세 리소스 일괄 조회 API"""
+    try:
+        with engine.connect() as conn:
+            g_row = conn.execute(
+                text("SELECT fg_name, fg_period, fg_status FROM fair_group WHERE fg_id = :fg_id"),
+                {"fg_id": fg_id}
+            ).first()
+            if not g_row:
+                raise HTTPException(status_code=404, detail="해당 대그룹을 찾을 수 없습니다.")
+            
+            system_name = g_row[0]
+            period = g_row[1] or ""
+            status = g_row[2] or "진행중"
+
+            # 심사위원
+            res_judges = conn.execute(
+                text("SELECT fj_id, fj_name, fj_affiliation, fj_role FROM fair_judge WHERE fj_fg_id = :fg_id ORDER BY fj_id ASC"),
+                {"fg_id": fg_id}
+            )
+            judges_list = []
+            for r in res_judges:
+                judges_list.append({
+                    "id": r[0],
+                    "name": r[1],
+                    "affiliation": r[2] or "",
+                    "role": r[3] or "심사위원"
+                })
+
+            # 부문
+            res_bumans = conn.execute(
+                text("SELECT fb_id, fb_prefix, fb_name, fb_type FROM fair_buman WHERE fb_fg_id = :fg_id ORDER BY fb_id ASC"),
+                {"fg_id": fg_id}
+            )
+            bumans_list = []
+            buman_ids = {}
+            for r in res_bumans:
+                bumans_list.append({
+                    "id": r[0],
+                    "prefix": r[1],
+                    "name": r[2],
+                    "type": r[3]
+                })
+                buman_ids[r[1]] = r[0]
+
+            # 부문별 제품
+            products_map = {}
+            for prefix, fb_id in buman_ids.items():
+                res_prods = conn.execute(
+                    text("SELECT fp_id, fp_code, fp_name FROM fair_product WHERE fp_fb_id = :fb_id ORDER BY fp_id ASC"),
+                    {"fb_id": fb_id}
+                )
+                prod_list = []
+                for rp in res_prods:
+                    prod_list.append({
+                        "id": rp[0],
+                        "code": rp[1],
+                        "name": rp[2] or ""
+                    })
+                products_map[prefix] = prod_list
+
+            # 평가항목 템플릿
+            templates_map = {"open": [], "blind": []}
+            for prefix, fb_id in buman_ids.items():
+                b_type = next((b["type"] for b in bumans_list if b["prefix"] == prefix), "open")
+                res_groups = conn.execute(
+                    text("SELECT DISTINCT fei_group_name FROM fair_evaluation_item WHERE fei_fb_id = :fb_id"),
+                    {"fb_id": fb_id}
+                )
+                for rg in res_groups:
+                    g_name = rg[0]
+                    res_items = conn.execute(
+                        text("SELECT fei_id, fei_name, fei_max_score, fei_convert_to FROM fair_evaluation_item WHERE fei_fb_id = :fb_id AND fei_group_name = :g_name ORDER BY fei_id ASC"),
+                        {"fb_id": fb_id, "g_name": g_name}
+                    )
+                    items_list = []
+                    convert_val = ""
+                    for ri in res_items:
+                        items_list.append({
+                            "id": ri[0],
+                            "name": ri[1],
+                            "max": ri[2]
+                        })
+                        if ri[3] is not None:
+                            convert_val = str(ri[3])
+                    templates_map[b_type].append({
+                        "id": fb_id,
+                        "name": g_name,
+                        "convertTo": convert_val,
+                        "items": items_list
+                    })
+
+            # 비어있을 시 디폴트 템플릿 구조 로딩
+            if not templates_map["open"] and not templates_map["blind"]:
+                templates_map = {
+                    "open": [
+                        {
+                            "id": 1,
+                            "name": "관능평가",
+                            "convertTo": "70",
+                            "items": [
+                                { "id": 1, "name": "식품의 색", "max": 15 },
+                                { "id": 2, "name": "식품의 향", "max": 15 },
+                                { "id": 3, "name": "식품의 맛", "max": 30 },
+                                { "id": 4, "name": "식품의 식감", "max": 20 },
+                                { "id": 5, "name": "종합평가", "max": 20 }
+                            ]
+                        },
+                        {
+                            "id": 2,
+                            "name": "상품성평가",
+                            "convertTo": "",
+                            "items": [
+                                { "id": 6, "name": "창의성", "max": 30 },
+                                { "id": 7, "name": "디자인", "max": 20 }
+                            ]
+                        }
+                    ],
+                    "blind": [
+                        {
+                            "id": 3,
+                            "name": "관능평가",
+                            "convertTo": "",
+                            "items": [
+                                { "id": 8, "name": "술의 색", "max": 20 },
+                                { "id": 9, "name": "술의 향", "max": 20 },
+                                { "id": 10, "name": "술의 맛", "max": 30 },
+                                { "id": 11, "name": "후미 및 목넘김", "max": 20 },
+                                { "id": 12, "name": "종합평가", "max": 30 }
+                            ]
+                        }
+                    ]
+                }
+
+            return {
+                "status": "success",
+                "systemName": system_name,
+                "period": period,
+                "status": status,
+                "judges": judges_list,
+                "bumans": bumans_list,
+                "products": products_map,
+                "templates": templates_map
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"상세 정보 조회 중 오류 발생: {str(e)}")
+
+@router.post("/groups/{fg_id}/save")
+def save_group_details(fg_id: int, req: SaveDetailsRequest):
+    """대그룹(품평회 대회) 상세 리소스 일괄 저장 API"""
+    try:
+        with engine.connect() as conn:
+            trans = conn.begin()
+            try:
+                # 1. 대회 정보 업데이트
+                conn.execute(
+                    text("UPDATE fair_group SET fg_name = :name, fg_period = :period, fg_status = :status WHERE fg_id = :fg_id"),
+                    {"name": req.systemName, "period": req.period, "status": req.status, "fg_id": fg_id}
+                )
+
+                # 2. 기존 종속 관계 데이터 삭제
+                conn.execute(text("DELETE FROM fair_judge WHERE fj_fg_id = :fg_id"), {"fg_id": fg_id})
+                conn.execute(text("DELETE FROM fair_buman WHERE fb_fg_id = :fg_id"), {"fg_id": fg_id})
+
+                # 3. 심사위원 기입
+                for j in req.judges:
+                    conn.execute(
+                        text("INSERT INTO fair_judge (fj_fg_id, fj_name, fj_affiliation, fj_role) VALUES (:fg_id, :name, :aff, :role)"),
+                        {"fg_id": fg_id, "name": j.name, "aff": j.affiliation, "role": j.role}
+                    )
+
+                # 4. 부문 기입
+                prefix_to_fb_id = {}
+                for b in req.bumans:
+                    conn.execute(
+                        text("INSERT INTO fair_buman (fb_fg_id, fb_prefix, fb_name, fb_type) VALUES (:fg_id, :prefix, :name, :type)"),
+                        {"fg_id": fg_id, "prefix": b.prefix, "name": b.name, "type": b.type}
+                    )
+                    inserted_fb_id = conn.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+                    prefix_to_fb_id[b.prefix] = inserted_fb_id
+
+                # 5. 제품 기입
+                for prefix, prod_list in req.products.items():
+                    fb_id = prefix_to_fb_id.get(prefix)
+                    if fb_id:
+                        for p in prod_list:
+                            conn.execute(
+                                text("INSERT INTO fair_product (fp_fb_id, fp_code, fp_name) VALUES (:fb_id, :code, :name)"),
+                                {"fb_id": fb_id, "code": p.code, "name": p.name}
+                            )
+
+                # 6. 평가항목 기입
+                # open
+                for g in req.templates.open:
+                    fb_id = g.id
+                    if fb_id not in prefix_to_fb_id.values():
+                        open_fb_ids = [prefix_to_fb_id[bm.prefix] for bm in req.bumans if bm.type == 'open']
+                        fb_id = open_fb_ids[0] if open_fb_ids else None
+                    
+                    if fb_id:
+                        for item in g.items:
+                            conv_val = int(g.convertTo) if g.convertTo and g.convertTo.isdigit() else None
+                            conn.execute(
+                                text("INSERT INTO fair_evaluation_item (fei_fb_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES (:fb_id, :g_name, :name, :max, :conv)"),
+                                {"fb_id": fb_id, "g_name": g.name, "name": item.name, "max": item.max, "conv": conv_val}
+                            )
+                
+                # blind
+                for g in req.templates.blind:
+                    fb_id = g.id
+                    if fb_id not in prefix_to_fb_id.values():
+                        blind_fb_ids = [prefix_to_fb_id[bm.prefix] for bm in req.bumans if bm.type == 'blind']
+                        fb_id = blind_fb_ids[0] if blind_fb_ids else None
+                    
+                    if fb_id:
+                        for item in g.items:
+                            conv_val = int(g.convertTo) if g.convertTo and g.convertTo.isdigit() else None
+                            conn.execute(
+                                text("INSERT INTO fair_evaluation_item (fei_fb_id, fei_group_name, fei_name, fei_max_score, fei_convert_to) VALUES (:fb_id, :g_name, :name, :max, :conv)"),
+                                {"fb_id": fb_id, "g_name": g.name, "name": item.name, "max": item.max, "conv": conv_val}
+                            )
+
+                trans.commit()
+                return {
+                    "status": "success",
+                    "message": "대그룹 상세 설정이 데이터베이스에 일괄 저장 및 반영되었습니다."
+                }
+            except Exception as inner_err:
+                trans.rollback()
+                raise inner_err
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"상세 설정 저장 중 오류 발생: {str(e)}")
+
 @router.get("/results")
 def get_results():
     """심사위원 점수 집계 결과 및 순위 조회 API"""
