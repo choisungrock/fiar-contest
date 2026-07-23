@@ -226,8 +226,10 @@ def get_group_details(fg_id: int):
                     text("SELECT DISTINCT fei_group_name FROM fair_evaluation_item WHERE fei_fb_id = :fb_id"),
                     {"fb_id": open_fb_id}
                 )
+                g_seq = 1000
                 for rg in res_groups:
                     g_name = rg[0]
+                    g_seq += 1
                     res_items = conn.execute(
                         text("SELECT fei_id, fei_name, fei_max_score, fei_convert_to FROM fair_evaluation_item WHERE fei_fb_id = :fb_id AND fei_group_name = :g_name ORDER BY fei_id ASC"),
                         {"fb_id": open_fb_id, "g_name": g_name}
@@ -243,7 +245,7 @@ def get_group_details(fg_id: int):
                         if ri[3] is not None:
                             convert_val = str(ri[3])
                     templates_map["open"].append({
-                        "id": open_fb_id,
+                        "id": g_seq,
                         "name": g_name,
                         "convertTo": convert_val,
                         "items": items_list
@@ -256,8 +258,10 @@ def get_group_details(fg_id: int):
                     text("SELECT DISTINCT fei_group_name FROM fair_evaluation_item WHERE fei_fb_id = :fb_id"),
                     {"fb_id": blind_fb_id}
                 )
+                g_seq = 2000
                 for rg in res_groups:
                     g_name = rg[0]
+                    g_seq += 1
                     res_items = conn.execute(
                         text("SELECT fei_id, fei_name, fei_max_score, fei_convert_to FROM fair_evaluation_item WHERE fei_fb_id = :fb_id AND fei_group_name = :g_name ORDER BY fei_id ASC"),
                         {"fb_id": blind_fb_id, "g_name": g_name}
@@ -273,7 +277,7 @@ def get_group_details(fg_id: int):
                         if ri[3] is not None:
                             convert_val = str(ri[3])
                     templates_map["blind"].append({
-                        "id": blind_fb_id,
+                        "id": g_seq,
                         "name": g_name,
                         "convertTo": convert_val,
                         "items": items_list

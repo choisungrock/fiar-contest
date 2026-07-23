@@ -1370,7 +1370,7 @@ function App() {
                 const rawTotal = g.items.reduce((sum, it) => sum + (Number(it.max) || 0), 0);
 
                 return (
-                  <div key={g.id} className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[1000px] shadow-sm">
+                  <div key={`${g.id || idx}-${g.name}`} className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[1000px] shadow-sm">
                     {/* 카드 헤더 */}
                     <div
                       className="p-4 px-5 border-b border-[#e5e9f0] flex items-center gap-4 flex-wrap"
