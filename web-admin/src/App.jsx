@@ -82,6 +82,8 @@ function App() {
   const [productBuman, setProductBuman] = useState('A');
   const [resultBuman, setResultBuman] = useState('A');
   const [template, setTemplate] = useState('open'); // open | blind (항목 설정용)
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [toast, setToast] = useState('');
 
   // 3) 관리 리소스 데이터 상태
@@ -174,6 +176,34 @@ function App() {
           setBumans(data.bumans || []);
           setProducts(data.products || {});
           setTemplates(data.templates || { open: [], blind: [] });
+
+          if (data.period) {
+            const cleanPeriod = data.period.replace(/\./g, '-').replace(/\s/g, '');
+            // dash, wave, en-dash 등 구분자 지원 분할
+            const parts = cleanPeriod.split(/–|~|--/);
+            if (parts.length >= 2) {
+              const start = parts[0];
+              let end = parts[1];
+              if (start.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                setStartDate(start);
+                if (end.match(/^\d{2}-\d{2}$/)) {
+                  end = `${start.substring(0, 4)}-${end}`;
+                }
+                if (end.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                  setEndDate(end);
+                }
+              }
+            } else if (cleanPeriod.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              setStartDate(cleanPeriod);
+              setEndDate(cleanPeriod);
+            } else {
+              setStartDate('');
+              setEndDate('');
+            }
+          } else {
+            setStartDate('');
+            setEndDate('');
+          }
         }
       } else {
         console.error("[fetchGroupDetails] API 응답 에러 상태:", response.status);
@@ -427,7 +457,31 @@ function App() {
 
   // 변경사항 저장 토스트 노출
   const handleSaveAll = async () => {
-    saveState({ groups, systemName, judges, bumans, products, templates });
+    const makePeriodString = () => {
+      if (!startDate || !endDate) return "";
+      const sY = startDate.substring(0, 4);
+      const sM = startDate.substring(5, 7);
+      const sD = startDate.substring(8, 10);
+      const eY = endDate.substring(0, 4);
+      const eM = endDate.substring(5, 7);
+      const eD = endDate.substring(8, 10);
+      if (sY === eY) {
+        return `${sY}.${sM}.${sD} – ${eM}.${eD}`;
+      } else {
+        return `${sY}.${sM}.${sD} – ${eY}.${eM}.${eD}`;
+      }
+    };
+
+    const nextPeriod = makePeriodString();
+    const nextGroups = groups.map(g => {
+      if (g.id === activeGroup) {
+        return { ...g, name: systemName, period: nextPeriod };
+      }
+      return g;
+    });
+    setGroups(nextGroups);
+
+    saveState({ groups: nextGroups, systemName, judges, bumans, products, templates });
 
     try {
       const response = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/save`, {
@@ -435,7 +489,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           systemName,
-          period: groups.find(g => g.id === activeGroup)?.period || "",
+          period: nextPeriod,
           status: groups.find(g => g.id === activeGroup)?.status || "준비중",
           judges,
           bumans,
@@ -818,6 +872,34 @@ function App() {
                   onChange={(e) => setSystemName(e.target.value)}
                   className="mt-4 w-full h-[52px] border-[1.5px] border-[#cbd3e1] rounded-[11px] px-[18px] text-[17px] font-extrabold text-[#1b2a4a] bg-white focus:outline-none focus:border-primary transition-all"
                 />
+
+                <div className="mt-[30px] text-[16px] font-extrabold text-[#1b2a4a] leading-none">
+                  대회 개최 기간 설정
+                </div>
+                <div className="mt-1.5 text-[13px] text-[#8b97ab] leading-none">
+                  품평회가 실시되는 공식 시작일과 종료일 기간을 설정합니다.
+                </div>
+                <div className="mt-4 flex items-center gap-3">
+                  <div className="flex-1">
+                    <span className="text-[12px] font-bold text-[#5a6a82] block mb-1.5">시작일</span>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full h-[50px] border-[1.5px] border-[#cbd3e1] rounded-[11px] px-[14px] text-[15px] font-bold text-[#1b2a4a] bg-white focus:outline-none focus:border-primary transition-all"
+                    />
+                  </div>
+                  <span className="text-[#8b97ab] font-extrabold text-[16px] mt-6">~</span>
+                  <div className="flex-1">
+                    <span className="text-[12px] font-bold text-[#5a6a82] block mb-1.5">종료일</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full h-[50px] border-[1.5px] border-[#cbd3e1] rounded-[11px] px-[14px] text-[15px] font-bold text-[#1b2a4a] bg-white focus:outline-none focus:border-primary transition-all"
+                    />
+                  </div>
+                </div>
 
                 <div className="mt-[30px] text-[16px] font-extrabold text-[#1b2a4a] leading-none">
                   평가 방식 정보
