@@ -397,9 +397,6 @@ function App() {
             <h1 className="text-2xl md:text-3xl font-extrabold text-white mt-2.5 leading-normal">
               전문가 품평회<br />관리 시스템
             </h1>
-            <p className="text-sm text-textBlue mt-2">
-              2026 우리쌀·우리술 K-라이스페스타
-            </p>
           </div>
 
           {/* 로그인 폼 */}
