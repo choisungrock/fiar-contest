@@ -1114,9 +1114,9 @@ function App() {
 
                 {bumans.map((b, idx) => {
                   const prodLen = (products[b.prefix] || []).length;
-                  const badgeStyle = prodLen === 0 
-                    ? "bg-[#f4f6fa] text-[#8b97ab] border border-gray-200" 
-                    : "bg-[#eaf3fb] text-[#2f5488] border border-blue-200";
+                  const badgeStyle = (b.cat === 'blind' || b.type === 'blind')
+                    ? "bg-[#eef4fb] text-[#2f5488] border border-blue-100"
+                    : "bg-[#f2f7ea] text-[#55821d] border border-green-100";
 
                   return (
                     <div key={b.id} className="grid grid-cols-[56px_90px_130px_1.6fr_150px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0">
@@ -1133,23 +1133,17 @@ function App() {
                         />
                       </div>
                       <div className="p-1.5">
-                        <div className="relative flex items-center justify-center">
-                          <select
-                            value={b.cat || b.type || 'open'}
-                            onChange={(e) => {
-                              const next = bumans.map(x => x.id === b.id ? { ...x, cat: e.target.value, type: e.target.value } : x);
-                              setBumans(next);
-                            }}
-                            className={`w-full h-[32px] border-none rounded-full px-4 text-[12px] font-extrabold text-center cursor-pointer focus:outline-none appearance-none transition-all ${
-                              (b.cat === 'blind' || b.type === 'blind')
-                                ? 'bg-[#eef4fb] text-[#2f5488] border border-blue-100'
-                                : 'bg-[#f2f7ea] text-[#55821d] border border-green-100'
-                            }`}
-                          >
-                            <option value="open">오픈</option>
-                            <option value="blind">블라인드</option>
-                          </select>
-                        </div>
+                        <select
+                          value={b.cat || b.type || 'open'}
+                          onChange={(e) => {
+                            const next = bumans.map(x => x.id === b.id ? { ...x, cat: e.target.value, type: e.target.value } : x);
+                            setBumans(next);
+                          }}
+                          className="w-full h-10 border border-[#dde3ec] rounded-lg px-2 text-[13px] font-semibold bg-white text-primary"
+                        >
+                          <option value="open">오픈</option>
+                          <option value="blind">블라인드</option>
+                        </select>
                       </div>
                       <div className="p-1.5">
                         <input
