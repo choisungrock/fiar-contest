@@ -248,8 +248,7 @@ function App() {
 
   // 새 품평회 대그룹 만들기
   const handleAddGroup = async () => {
-    const nextId = groups.length + 1;
-    const name = `제 ${nextId}회 쌀·술가공식품 품평회`;
+    const name = "새 품평회 (제목 입력)";
     
     try {
       const response = await fetch("http://localhost:18000/api/admin/groups", {
@@ -257,7 +256,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name,
-          period: "2026.11.01 – 11.03",
+          period: "",
           status: "준비중"
         })
       });
@@ -271,10 +270,11 @@ function App() {
     } catch (e) {
       console.error("대그룹 생성 오류:", e);
       // Fallback
+      const nextId = groups.length + 1;
       const newGroups = [...groups, {
         id: nextId,
         name,
-        period: '2026.11.01 – 11.03',
+        period: '',
         status: '준비중',
         progress: 0
       }];
@@ -610,7 +610,7 @@ function App() {
                   </div>
 
                   <div style={{ marginTop: '8px', fontSize: '13px', color: '#8b97ab', fontWeight: 600 }}>
-                    {group.period}
+                    {group.period && group.period.trim() !== "" ? group.period : "기간 없음"}
                   </div>
 
                   <div style={{ marginTop: '18px', display: 'flex', gap: '22px' }}>
