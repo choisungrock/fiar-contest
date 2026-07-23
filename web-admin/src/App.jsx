@@ -94,6 +94,7 @@ function App() {
     templates: { open: [], blind: [] }
   });
   const [toast, setToast] = useState('');
+  const [draggedIdx, setDraggedIdx] = useState(null);
 
   // 3) 관리 리소스 데이터 상태
   const [judges, setJudges] = useState([]);
@@ -408,6 +409,37 @@ function App() {
     } else {
       saveState({ bumans: newBumans });
     }
+  };
+
+  // 부문 드래그 앤 드롭 정렬 핸들러
+  const handleDragStart = (e, index) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index);
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === index) return;
+
+    const newBumans = [...bumans];
+    const draggedItem = newBumans[draggedIdx];
+    newBumans.splice(draggedIdx, 1);
+    newBumans.splice(index, 0, draggedItem);
+
+    setBumans(newBumans);
+    setDraggedIdx(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    saveState({ bumans });
+  };
+
+  const handleDrop = (e, index) => {
+    e.preventDefault();
+    setDraggedIdx(null);
+    saveState({ bumans });
   };
 
   // 제품 추가
@@ -1119,8 +1151,21 @@ function App() {
                     : "bg-[#f2f7ec] text-[#5a7a3f] border border-[#cfe0cf]";
 
                   return (
-                    <div key={b.id} className="grid grid-cols-[56px_90px_130px_1.6fr_150px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0">
-                      <div className="p-3 text-center font-bold text-[#8b97ab]">{idx + 1}</div>
+                    <div
+                      key={b.id}
+                      draggable="true"
+                      onDragStart={(e) => handleDragStart(e, idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDragEnd={handleDragEnd}
+                      onDrop={(e) => handleDrop(e, idx)}
+                      className={`grid grid-cols-[56px_90px_130px_1.6fr_150px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0 transition-all select-none ${
+                        draggedIdx === idx ? 'opacity-40 bg-[#f4f6fa]/70 border-dashed border-primary/20' : 'bg-white'
+                      }`}
+                    >
+                      <div className="p-3 text-center font-bold text-[#8b97ab] cursor-grab active:cursor-grabbing flex items-center justify-center gap-1" title="드래그하여 순서 변경">
+                        <span className="text-[14px] text-gray-400 font-normal">☰</span>
+                        <span>{idx + 1}</span>
+                      </div>
                       <div className="p-1.5">
                         <input
                           type="text"
