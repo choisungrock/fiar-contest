@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS fair_group (
   fg_name VARCHAR(255) NOT NULL,
   fg_period VARCHAR(100),
   fg_status VARCHAR(20) DEFAULT '준비중',
+  fg_code VARCHAR(100) NOT NULL UNIQUE,
   fg_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -79,8 +80,8 @@ CREATE TABLE IF NOT EXISTS fair_score_record (
 -- ==================== 초기 테스트 데이터 적재 ====================
 
 -- 1. 대그룹
-INSERT INTO fair_group (fg_id, fg_name, fg_period, fg_status) VALUES
-(1, '2026 우리쌀·우리술 K-라이스페스타 품평회', '2026.09.01 – 09.03', '진행중');
+INSERT INTO fair_group (fg_id, fg_name, fg_period, fg_status, fg_code) VALUES
+(1, '2026 우리쌀·우리술 K-라이스페스타 품평회', '2026.09.01 – 09.03', '진행중', 'krice2026');
 
 -- 2. 부문
 INSERT INTO fair_buman (fb_id, fb_fg_id, fb_prefix, fb_group, fb_name, fb_type) VALUES

@@ -80,6 +80,7 @@ function App() {
     }
   });
   const [systemName, setSystemName] = useState('');
+  const [systemCode, setSystemCode] = useState('');
   const [productBuman, setProductBuman] = useState('A');
   const [resultBuman, setResultBuman] = useState('A');
   const [template, setTemplate] = useState('open'); // open | blind (항목 설정용)
@@ -87,6 +88,7 @@ function App() {
   const [endDate, setEndDate] = useState('');
   const [dbBackup, setDbBackup] = useState({
     systemName: '',
+    systemCode: '',
     startDate: '',
     endDate: '',
     judges: [],
@@ -186,6 +188,7 @@ function App() {
         console.log("[fetchGroupDetails] API 응답 수신 성공:", data);
         if (data.status === "success" || data.judges !== undefined) {
           setSystemName(data.systemName || '');
+          setSystemCode(data.systemCode || '');
           setJudges(data.judges || []);
           setBumans(data.bumans || []);
           setProducts(data.products || {});
@@ -241,6 +244,7 @@ function App() {
 
           setDbBackup({
             systemName: data.systemName || '',
+            systemCode: data.systemCode || '',
             startDate: parsedStart,
             endDate: parsedEnd,
             judges: data.judges || [],
@@ -266,7 +270,7 @@ function App() {
   // 브라우저 새로고침 및 탭 닫기 이탈 가드
   useEffect(() => {
     const handleBeforeUnload = (e) => {
-      const current = JSON.stringify({ systemName, startDate, endDate, judges, bumans, products, templates });
+      const current = JSON.stringify({ systemName, systemCode, startDate, endDate, judges, bumans, products, templates });
       const backup = JSON.stringify(dbBackup);
       if (current !== backup) {
         e.preventDefault();
@@ -276,7 +280,7 @@ function App() {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [systemName, startDate, endDate, judges, bumans, products, templates, dbBackup]);
+  }, [systemName, systemCode, startDate, endDate, judges, bumans, products, templates, dbBackup]);
 
   // groups 목록이 갱신되거나 activeGroup이 바뀔 때, 해당 대회의 이름으로 systemName 동적 복원 보정
   useEffect(() => {
@@ -629,7 +633,7 @@ function App() {
     });
     setGroups(nextGroups);
 
-    saveState({ groups: nextGroups, systemName, judges, bumans, products, templates });
+    saveState({ groups: nextGroups, systemName, systemCode, judges, bumans, products, templates });
 
     try {
       const response = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/save`, {
@@ -637,6 +641,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           systemName,
+          systemCode,
           period: nextPeriod,
           status: groups.find(g => g.id === activeGroup)?.status || "준비중",
           judges,
@@ -649,6 +654,7 @@ function App() {
       if (response.ok) {
         setDbBackup({
           systemName,
+          systemCode,
           startDate,
           endDate,
           judges,
@@ -665,6 +671,7 @@ function App() {
       console.error("데이터베이스 저장 중 에러:", e);
       setDbBackup({
         systemName,
+        systemCode,
         startDate,
         endDate,
         judges,
@@ -679,7 +686,7 @@ function App() {
   // 이탈 가드: 변경 사항 감지 및 컨펌/복원 수행
   const confirmLeave = async () => {
     const hasUnsavedChanges = () => {
-      const current = JSON.stringify({ systemName, startDate, endDate, judges, bumans, products, templates });
+      const current = JSON.stringify({ systemName, systemCode, startDate, endDate, judges, bumans, products, templates });
       const backup = JSON.stringify(dbBackup);
       return current !== backup;
     };
@@ -691,6 +698,7 @@ function App() {
         return true;
       } else {
         setSystemName(dbBackup.systemName);
+        setSystemCode(dbBackup.systemCode);
         setStartDate(dbBackup.startDate);
         setEndDate(dbBackup.endDate);
         setJudges(dbBackup.judges);
@@ -704,6 +712,7 @@ function App() {
         saveState({
           groups,
           systemName: dbBackup.systemName,
+          systemCode: dbBackup.systemCode,
           judges: dbBackup.judges,
           bumans: dbBackup.bumans,
           products: dbBackup.products,
@@ -1087,6 +1096,45 @@ function App() {
                   onChange={(e) => setSystemName(e.target.value)}
                   className="mt-4 w-full h-[52px] border-[1.5px] border-[#cbd3e1] rounded-[11px] px-[18px] text-[17px] font-extrabold text-[#1b2a4a] bg-white focus:outline-none focus:border-primary transition-all"
                 />
+
+                <div className="mt-[30px] text-[16px] font-extrabold text-[#1b2a4a] leading-none">
+                  대회 전용 주소 식별 키 (groupName)
+                </div>
+                <div className="mt-1.5 text-[13px] text-[#8b97ab] leading-none">
+                  인터넷 주소창(URL) 뒤에 붙을 영문 식별 주소명입니다. (중복 방지를 위해 영문/숫자만 권장)
+                </div>
+                <input
+                  type="text"
+                  value={systemCode}
+                  onChange={(e) => setSystemCode(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
+                  className="mt-4 w-full h-[52px] border-[1.5px] border-[#cbd3e1] rounded-[11px] px-[18px] text-[17px] font-bold text-[#1b2a4a] bg-white focus:outline-none focus:border-primary transition-all"
+                  placeholder="예: krice2026"
+                />
+
+                {/* 입력창 바로 아래에 주소와 주소 복사버튼 통합 배치 */}
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="text-[13px] font-bold text-[#5a6a82] shrink-0 bg-[#eaf1f9] border border-[#cbd3e1] rounded-[8px] px-2.5 py-1.5">
+                    접속 주소
+                  </span>
+                  <input
+                    type="text"
+                    readOnly
+                    value={`${window.location.protocol}//${window.location.hostname}:18002/${systemCode}`}
+                    className="flex-grow h-[46px] border-[1.5px] border-[#cbd3e1] rounded-[10px] px-[14px] text-[14px] font-semibold text-[#5a6a82] bg-[#f8fafc] focus:outline-none"
+                    onClick={(e) => e.target.select()}
+                  />
+                  <button
+                    onClick={() => {
+                      const url = `${window.location.protocol}//${window.location.hostname}:18002/${systemCode}`;
+                      navigator.clipboard.writeText(url)
+                        .then(() => alert('심사 URL이 클립보드에 복사되었습니다.'))
+                        .catch(() => alert('URL 복사에 실패했습니다. 주소를 직접 드래그해서 복사해 주세요.'));
+                    }}
+                    className="h-[46px] px-5 rounded-[10px] bg-[#1b2a4a] text-white text-[13px] font-extrabold hover:bg-secondary cursor-pointer transition-all shrink-0"
+                  >
+                    주소 복사
+                  </button>
+                </div>
 
                 <div className="mt-[30px] text-[16px] font-extrabold text-[#1b2a4a] leading-none">
                   대회 개최 기간 설정

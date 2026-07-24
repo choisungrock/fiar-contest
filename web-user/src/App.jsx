@@ -53,22 +53,36 @@ const NAMES = {
 const COUNT = 8;
 
 function App() {
-  // 핵심 상태 정의 (시안과 동일한 구조 지원)
+  // 쿼리 파라미터 또는 경로 파라미터에서 groupName 추출 (예: /krice2026)
+  const params = new URLSearchParams(window.location.search);
+  const queryGroup = params.get('groupName');
+  const pathGroup = window.location.pathname.replace(/^\/+/, '');
+  const groupName = queryGroup || pathGroup || 'krice2026';
+
   const [screen, setScreen] = useState('start'); // start | eval | done
   const [judgeName, setJudgeName] = useState('');
+  const [judgeId, setJudgeId] = useState(null);
   const [selectedBuman, setSelectedBuman] = useState('A');
   const [scores, setScores] = useState({}); // { [bumanKey]: { [productCode]: { [itemKey]: value } } }
   const [completed, setCompleted] = useState({}); // { [bumanKey]: boolean }
   const [modal, setModal] = useState(null); // { code, itemKey } | null
   const [toast, setToast] = useState('');
 
+  // API 동적 데이터 바인딩 상태
+  const [systemName, setSystemName] = useState('2026 우리쌀·우리술 K-라이스페스타 품평회');
+  const [period, setPeriod] = useState('2026.09.01 – 09.03');
+  const [bumans, setBumans] = useState(BUMANS);
+  const [productsMap, setProductsMap] = useState({});
+  const [templatesMap, setTemplatesMap] = useState({});
+
   // 컴포넌트 마운트 시 로컬스토리지 복구
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('kricefesta_eval_v1');
+      const raw = localStorage.getItem('kricefesta_eval_v2');
       if (raw) {
         const d = JSON.parse(raw);
         if (d.judgeName) setJudgeName(d.judgeName);
+        if (d.judgeId) setJudgeId(d.judgeId);
         if (d.scores) setScores(d.scores);
         if (d.completed) setCompleted(d.completed);
       }
@@ -77,15 +91,49 @@ function App() {
     }
   }, []);
 
+  // 대회 초기화 동적 메타데이터 로드
+  useEffect(() => {
+    const loadInitData = async () => {
+      try {
+        const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/init`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.systemName) setSystemName(data.systemName);
+          if (data.period) setPeriod(data.period);
+          if (data.bumans && data.bumans.length > 0) {
+            const mappedBumans = data.bumans.map(b => {
+              const isWoolisul = b.group === '우리술' || b.name.includes('주') || b.name.includes('술');
+              return {
+                key: b.prefix,
+                cat: isWoolisul ? 'woolisul' : 'ricefood',
+                name: b.name,
+                prefix: b.prefix,
+                test: b.type === 'open' ? '오픈테스트' : '블라인드'
+              };
+            });
+            setBumans(mappedBumans);
+            setSelectedBuman(mappedBumans[0].prefix);
+          }
+          if (data.products) setProductsMap(data.products);
+          if (data.templates) setTemplatesMap(data.templates);
+        }
+      } catch (e) {
+        console.error("대회 초기 데이터 로딩 에러:", e);
+      }
+    };
+    loadInitData();
+  }, [groupName]);
+
   // 영속화 헬퍼
   const persist = (nextState) => {
     try {
       const current = {
         judgeName: nextState.judgeName ?? judgeName,
+        judgeId: nextState.judgeId ?? judgeId,
         scores: nextState.scores ?? scores,
         completed: nextState.completed ?? completed,
       };
-      localStorage.setItem('kricefesta_eval_v1', JSON.stringify(current));
+      localStorage.setItem('kricefesta_eval_v2', JSON.stringify(current));
     } catch (e) {
       console.error('LocalStorage 저장 에러:', e);
     }
@@ -100,14 +148,39 @@ function App() {
   };
 
   // 현재 활성 부문 객체 조회
-  const buman = BUMANS.find((b) => b.key === selectedBuman) || BUMANS[0];
-  const cat = ITEMS[buman.cat];
-  const activeItems = [...cat.gwan, ...cat.sang];
+  const buman = bumans.find((b) => b.key === selectedBuman) || bumans[0] || BUMANS[0];
+  const serverBumanTemplate = templatesMap[selectedBuman];
+  const hasServerTemplate = serverBumanTemplate && serverBumanTemplate.length > 0;
+
+  // 세부 항목 평면 배열 구성
+  let activeItems = [];
+  if (hasServerTemplate) {
+    serverBumanTemplate.forEach(g => {
+      (g.items || []).forEach(it => {
+        activeItems.push({
+          id: it.id,
+          key: String(it.id),
+          name: it.name,
+          max: it.max,
+          scale: it.scale,
+          groupName: g.name
+        });
+      });
+    });
+  } else {
+    const cat = ITEMS[buman.cat];
+    activeItems = [
+      ...cat.gwan.map(x => ({ ...x, id: x.key, key: x.key, groupName: '관능평가' })),
+      ...cat.sang.map(x => ({ ...x, id: x.key, key: x.key, groupName: '상품성평가' }))
+    ];
+  }
 
   // 제품 목록 가져오기
   const getProductList = (bumanKey) => {
-    const b = BUMANS.find((x) => x.key === bumanKey);
-    if (!b) return [];
+    if (productsMap[bumanKey]) {
+      return productsMap[bumanKey];
+    }
+    const b = bumans.find((x) => x.key === bumanKey) || BUMANS[0];
     return Array.from({ length: COUNT }, (_, i) => {
       const num = i + 1;
       const code = `${b.prefix}-${num}`;
@@ -117,18 +190,42 @@ function App() {
   };
 
   // 로그인 (시작) 확인
-  const handleStart = (e) => {
+  const handleStart = async (e) => {
     e.preventDefault();
     if (!judgeName.trim()) {
       alert('평가자 성명을 기입해 주세요.');
       return;
     }
-    persist({ judgeName });
-    setScreen('eval');
+    
+    try {
+      const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ judgeName: judgeName.trim() })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setJudgeId(data.judgeId);
+        if (data.scores) {
+          setScores(data.scores);
+          persist({ judgeName, scores: data.scores, judgeId: data.judgeId });
+        } else {
+          persist({ judgeName, judgeId: data.judgeId });
+        }
+        setScreen('eval');
+      } else {
+        alert("로그인 처리에 실패하였습니다.");
+      }
+    } catch (err) {
+      console.error("로그인 API 에러:", err);
+      // 오프라인 폴백 진입
+      persist({ judgeName });
+      setScreen('eval');
+    }
   };
 
   // 단일 셀 점수 입력
-  const pickScore = (code, itemKey, val) => {
+  const pickScore = async (code, itemKey, val) => {
     const nextScores = { ...scores };
     const bScores = { ...(nextScores[selectedBuman] || {}) };
     const pScores = { ...(bScores[code] || {}) };
@@ -140,10 +237,28 @@ function App() {
     setScores(nextScores);
     persist({ scores: nextScores });
     setModal(null);
+
+    // 서버 실시간 동기화
+    if (judgeId) {
+      try {
+        await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            judgeId,
+            productCode: code,
+            itemId: isNaN(itemKey) ? 0 : parseInt(itemKey),
+            score: val
+          })
+        });
+      } catch (e) {
+        console.error("실시간 배점 동기화 실패:", e);
+      }
+    }
   };
 
   // 입력된 점수 초기화
-  const clearScore = (code, itemKey) => {
+  const clearScore = async (code, itemKey) => {
     const nextScores = { ...scores };
     const bScores = { ...(nextScores[selectedBuman] || {}) };
     const pScores = { ...(bScores[code] || {}) };
@@ -155,12 +270,29 @@ function App() {
     setScores(nextScores);
     persist({ scores: nextScores });
     setModal(null);
+
+    // 서버 실시간 동기화 (삭제)
+    if (judgeId) {
+      try {
+        await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            judgeId,
+            productCode: code,
+            itemId: isNaN(itemKey) ? 0 : parseInt(itemKey),
+            score: null
+          })
+        });
+      } catch (e) {
+        console.error("실시간 배점 삭제 실패:", e);
+      }
+    }
   };
 
   // 엑셀 모의 저장 기능
   const handleSaveExcel = () => {
     showToast('엑셀 파일 저장 프로세스가 호출되었습니다.');
-    // 실무 동기화나 엑셀 다운로드 파일 생성을 위한 로직 모킹
     const headers = ["제품분류코드", "제품명", ...activeItems.map(it => it.name), "소계"];
     const rows = getProductList(selectedBuman).map(p => {
       const s = scores[selectedBuman]?.[p.code] || {};
@@ -168,15 +300,34 @@ function App() {
       activeItems.forEach(it => {
         row.push(s[it.key] !== undefined ? s[it.key] : '미입력');
       });
+      
       // 소계 계산
-      const gwanSum = cat.gwan.reduce((sum, it) => sum + (s[it.key] || 0), 0);
-      const sangSum = cat.sang.reduce((sum, it) => sum + (s[it.key] || 0), 0);
       let subtotal = 0;
-      if (cat.convert) {
-        const cv = Math.round(gwanSum * 0.7 * 10) / 10;
-        subtotal = Math.round((cv + sangSum) * 10) / 10;
+      if (hasServerTemplate) {
+        let totalRaw = 0;
+        let totalConverted = 0;
+        serverBumanTemplate.forEach(g => {
+          let gSum = (g.items || []).reduce((sum, it) => sum + (s[String(it.id)] || 0), 0);
+          const gMax = (g.items || []).reduce((sum, it) => sum + (parseInt(it.max) || 0), 0);
+          const gConv = parseInt(g.convertTo) || 0;
+          let gFinal = gSum;
+          if (gConv > 0 && gMax > 0) {
+            gFinal = Math.round((gSum / gMax) * gConv);
+          }
+          totalRaw += gSum;
+          totalConverted += gFinal;
+        });
+        subtotal = totalConverted;
       } else {
-        subtotal = gwanSum;
+        const cat = ITEMS[buman.cat];
+        const gwanSum = cat.gwan.reduce((sum, it) => sum + (s[it.key] || 0), 0);
+        const sangSum = cat.sang.reduce((sum, it) => sum + (s[it.key] || 0), 0);
+        if (cat.convert) {
+          const cv = Math.round(gwanSum * 0.7 * 10) / 10;
+          subtotal = Math.round((cv + sangSum) * 10) / 10;
+        } else {
+          subtotal = gwanSum;
+        }
       }
       row.push(subtotal);
       return row;
@@ -186,7 +337,7 @@ function App() {
   };
 
   // 배점완료 제출 처리
-  const handleComplete = () => {
+  const handleComplete = async () => {
     // 모든 제품의 모든 채점 항목이 기입되어 있는지 체크
     const bScores = scores[selectedBuman] || {};
     const plist = getProductList(selectedBuman);
@@ -198,6 +349,18 @@ function App() {
     if (!allFilled) {
       alert('아직 미입력된 배점 항목이 존재합니다. 모든 평가 셀을 기입해 주세요.');
       return;
+    }
+
+    if (judgeId) {
+      try {
+        await fetch(`http://localhost:18000/api/user/groups/${groupName}/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ judgeId, bumanPrefix: selectedBuman })
+        });
+      } catch (e) {
+        console.error("완료 제출 에러:", e);
+      }
     }
 
     const nextCompleted = { ...completed, [selectedBuman]: true };
@@ -442,253 +605,290 @@ function App() {
 
           {/* 테이블 컨테이너 */}
           <div className="flex-1 overflow-auto py-[18px] px-[22px] pb-[40px]">
-            
-            {/* 쌀가공식품 평가 테이블 (convert === true) */}
-            {buman.cat === 'ricefood' && (
-              <div className="overflow-x-auto w-full border border-[#cfd8b9] rounded-[10px]">
-                <table className="border-collapse border-spacing-0 text-[13px] min-w-[900px] w-full bg-white overflow-hidden">
-                  <thead>
-                    <tr>
-                      <th rowSpan={3} className="sticky top-0 left-0 z-20 bg-[#dfe9d0] text-[#3f5a26] border-b-2 border-r border-[#cfd8b9] p-[8px] w-[96px] font-extrabold text-center">
-                        제품<br />분류코드
-                      </th>
-                      <th rowSpan={3} className="sticky top-0 z-10 bg-[#dfe9d0] text-[#3f5a26] border-b-2 border-r border-[#cfd8b9] p-[8px] w-[150px] font-extrabold text-left">
+            <div className="overflow-x-auto w-full border border-[#cbd3e1] rounded-[10px] bg-white">
+              <table className="border-collapse border-spacing-0 text-[13px] min-w-[900px] w-full bg-white overflow-hidden">
+                <thead>
+                  {/* 1단 헤더: 대분류명 및 환산/합계 정보 */}
+                  <tr className="bg-[#1b2a4a] text-white">
+                    <th rowSpan={3} className="sticky top-0 left-0 z-20 bg-[#1b2a4a] text-white border-b-2 border-r border-[#243a63] p-[8px] w-[96px] font-extrabold text-center">
+                      제품<br />분류코드
+                    </th>
+                    {buman.test !== '블라인드' && (
+                      <th rowSpan={3} className="sticky top-0 z-10 bg-[#1b2a4a] text-white border-b-2 border-r border-[#243a63] p-[8px] w-[150px] font-extrabold text-left">
                         제품명
                       </th>
-                      <th colSpan={5} className="sticky top-0 z-10 h-[32px] bg-[#eaf1de] text-[#4a6630] border-b border-r border-[#cbd6b1] font-extrabold text-center">
-                        관능 평가 (100점 → 70점 환산)
-                      </th>
-                      <th rowSpan={3} className="sticky top-0 z-10 bg-[#e7edda] text-[#4a6630] border-b-2 border-r border-[#cbd6b1] p-[8px] w-[78px] font-extrabold text-center">
-                        환산<br />(→70)
-                      </th>
-                      <th colSpan={2} className="sticky top-0 z-10 h-[32px] bg-[#eef0e3] text-[#6b6a2f] border-b border-r border-[#cbd6b1] font-extrabold text-center">
-                        상품성 평가 (50점)
-                      </th>
-                      <th rowSpan={3} className="sticky top-0 z-10 bg-[#dfe9d0] text-[#3f5a26] border-b-2 border-[#cfd8b9] p-[8px] w-[88px] font-extrabold text-center">
-                        소계<br />(120)
-                      </th>
-                    </tr>
-                    <tr>
-                      {cat.gwan.map(it => (
-                        <th key={it.key} className="sticky top-[32px] h-[30px] z-10 bg-[#f3f6ec] text-[#42582b] border-b border-r border-[#e3e9d5] p-[6px] font-bold text-center whitespace-nowrap">
-                          {it.name}
+                    )}
+                    
+                    {/* 동적 그룹명 맵 */}
+                    {hasServerTemplate ? (
+                      serverBumanTemplate.map(g => {
+                        const gItems = g.items || [];
+                        const colSpanVal = gItems.length;
+                        const hasConvert = parseInt(g.convertTo) > 0;
+                        return (
+                          <React.Fragment key={g.name}>
+                            {colSpanVal > 0 && (
+                              <th colSpan={colSpanVal} className="bg-[#243a63] text-white p-2 font-extrabold text-center border-b border-[#314a7c] border-r border-[#314a7c]">
+                                {g.name} {hasConvert && `(${gItems.reduce((sum, it) => sum + (parseInt(it.max) || 0), 0)}점 → ${g.convertTo}점 환산)`}
+                              </th>
+                            )}
+                            {hasConvert && (
+                              <th rowSpan={3} className="bg-[#1f4a38] text-white p-2.5 font-extrabold text-center border-r border-[#285d47] min-w-[70px] border-b-2 border-[#285d47]">
+                                환산<br />(→{g.convertTo})
+                              </th>
+                            )}
+                          </React.Fragment>
+                        );
+                      })
+                    ) : (
+                      // 로컬 fallback
+                      <>
+                        <th colSpan={cat.gwan.length} className="bg-[#243a63] text-white p-2 font-extrabold text-center border-b border-[#314a7c] border-r border-[#314a7c]">
+                          관능 평가 {cat.convert && "(100점 → 70점 환산)"}
                         </th>
-                      ))}
-                      {cat.sang.map(it => (
-                        <th key={it.key} className="sticky top-[32px] h-[30px] z-10 bg-[#f6f6ec] text-[#615f2b] border-b border-r border-[#e3e9d5] p-[6px] font-bold text-center whitespace-nowrap">
-                          {it.name}
-                        </th>
-                      ))}
-                    </tr>
-                    <tr>
-                      {cat.gwan.map(it => (
-                        <th key={it.key} className="sticky top-[62px] z-10 bg-[#fbfcf7] border-b-2 border-r border-[#cfd8b9] p-[4px] text-center">
-                          <div className="text-[15px] font-extrabold text-[#b58a2e]">{it.max}</div>
-                          <div className="text-[10px] text-[#98a08a]">{it.scale.join('·')}</div>
-                        </th>
-                      ))}
-                      {cat.sang.map(it => (
-                        <th key={it.key} className="sticky top-[62px] z-10 bg-[#fcfcf5] border-b-2 border-r border-[#cfd8b9] p-[4px] text-center">
-                          <div className="text-[15px] font-extrabold text-[#b58a2e]">{it.max}</div>
-                          <div className="text-[10px] text-[#98a08a]">{it.scale.join('·')}</div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {products.map((p, idx) => {
-                      const pScores = bScores[p.code] || {};
-                      
-                      // 관능 및 상품성 총합 계산
+                        {cat.convert && (
+                          <th rowSpan={3} className="bg-[#1f4a38] text-white p-2.5 font-extrabold text-center border-r border-[#285d47] min-w-[70px] border-b-2 border-[#285d47]">
+                            환산<br />(→70)
+                          </th>
+                        )}
+                        {cat.sang.length > 0 && (
+                          <th colSpan={cat.sang.length} className="bg-[#243a63] text-white p-2 font-extrabold text-center border-b border-[#314a7c] border-r border-[#314a7c]">
+                            상품성 평가
+                          </th>
+                        )}
+                      </>
+                    )}
+                    
+                    <th rowSpan={3} className="sticky top-0 z-10 bg-[#1b2a4a] text-white border-b-2 border-[#243a63] p-[8px] w-[88px] font-extrabold text-center">
+                      소계<br />(120)
+                    </th>
+                  </tr>
+
+                  {/* 2단 헤더: 세부 평가항목명 */}
+                  <tr className="bg-[#243a63] text-white text-[12px] border-b border-[#243a63]">
+                    {hasServerTemplate ? (
+                      serverBumanTemplate.map(g => (
+                        (g.items || []).map(it => (
+                          <th key={it.id} className="p-2 font-bold text-center border-r border-[#344f82] min-w-[80px] bg-[#2a4372]">
+                            {it.name}
+                          </th>
+                        ))
+                      ))
+                    ) : (
+                      <>
+                        {cat.gwan.map(it => (
+                          <th key={it.key} className="p-2 font-bold text-center border-r border-[#344f82] min-w-[80px] bg-[#2a4372]">
+                            {it.name}
+                          </th>
+                        ))}
+                        {cat.sang.map(it => (
+                          <th key={it.key} className="p-2 font-bold text-center border-r border-[#344f82] min-w-[80px] bg-[#2a4372]">
+                            {it.name}
+                          </th>
+                        ))}
+                      </>
+                    )}
+                  </tr>
+
+                  {/* 3단 헤더: 배점 및 척도 단계 가이드 */}
+                  <tr className="bg-[#f0f4fa] text-[#4a5568] text-[11px] border-b border-[#cbd3e1]">
+                    {hasServerTemplate ? (
+                      serverBumanTemplate.map(g => (
+                        (g.items || []).map(it => (
+                          <th key={it.id} className="p-1.5 text-center border-r border-[#cbd3e1] font-semibold">
+                            <div className="text-[14px] font-extrabold text-[#b58a2e]">{it.max}</div>
+                            <div className="text-[10px] text-[#8b97ab] font-bold">{(it.scale || []).join('·')}</div>
+                          </th>
+                        ))
+                      ))
+                    ) : (
+                      <>
+                        {cat.gwan.map(it => (
+                          <th key={it.key} className="p-1.5 text-center border-r border-[#cbd3e1] font-semibold">
+                            <div className="text-[14px] font-extrabold text-[#b58a2e]">{it.max}</div>
+                            <div className="text-[10px] text-[#8b97ab] font-bold">{it.scale.join('·')}</div>
+                          </th>
+                        ))}
+                        {cat.sang.map(it => (
+                          <th key={it.key} className="p-1.5 text-center border-r border-[#cbd3e1] font-semibold">
+                            <div className="text-[14px] font-extrabold text-[#b58a2e]">{it.max}</div>
+                            <div className="text-[10px] text-[#8b97ab] font-bold">{it.scale.join('·')}</div>
+                          </th>
+                        ))}
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                
+                {/* 데이터 렌더러 Body */}
+                <tbody>
+                  {products.map((p, idx) => {
+                    const pScores = bScores[p.code] || {};
+                    const isComplete = activeItems.every(it => pScores[it.key] !== undefined);
+                    
+                    // 총합 및 소계 계산
+                    let subtotal = 0;
+                    const renderedGroupValues = []; // { groupId/name, gwanSum, cv }
+
+                    if (hasServerTemplate) {
+                      let totalConverted = 0;
+                      serverBumanTemplate.forEach(g => {
+                        let gSum = (g.items || []).reduce((sum, it) => sum + (pScores[String(it.id)] || 0), 0);
+                        const gMax = (g.items || []).reduce((sum, it) => sum + (parseInt(it.max) || 0), 0);
+                        const gConv = parseInt(g.convertTo) || 0;
+                        let gFinal = gSum;
+                        if (gConv > 0 && gMax > 0) {
+                          gFinal = Math.round((gSum / gMax) * gConv * 10) / 10;
+                        }
+                        totalConverted += gFinal;
+                        renderedGroupValues.push({
+                          name: g.name,
+                          rawSum: gSum,
+                          converted: gFinal,
+                          hasConvert: gConv > 0
+                        });
+                      });
+                      subtotal = Math.round(totalConverted * 10) / 10;
+                    } else {
+                      const cat = ITEMS[buman.cat];
                       const gwanSum = cat.gwan.reduce((sum, it) => sum + (pScores[it.key] || 0), 0);
                       const sangSum = cat.sang.reduce((sum, it) => sum + (pScores[it.key] || 0), 0);
+                      const cv = cat.convert ? Math.round(gwanSum * 0.7 * 10) / 10 : gwanSum;
+                      subtotal = cat.convert ? Math.round((cv + sangSum) * 10) / 10 : gwanSum;
                       
-                      // 환산 점수 (70점) 계산
-                      const cv = Math.round(gwanSum * 0.7 * 10) / 10;
-                      const subtotal = Math.round((cv + sangSum) * 10) / 10;
-                      
-                      // 제품 완료 여부 체크
-                      const isComplete = activeItems.every(it => pScores[it.key] !== undefined);
-                      
-                      return (
-                        <tr
-                          key={p.code}
-                          className="transition-all hover:bg-gray-50"
-                          style={{
-                            backgroundColor: isComplete ? '#f2f7ea' : idx % 2 === 1 ? '#fbfcf8' : '#ffffff'
-                          }}
-                        >
-                          <td className="sticky left-0 bg-inherit border-b border-r border-[#e6ead9] py-[6px] px-[8px] text-center z-10 whitespace-nowrap">
-                            <div className="font-extrabold text-[#3f5a26] text-[15px] leading-none">
-                              {p.code}
-                            </div>
-                            {isComplete && (
-                              <span className="inline-block mt-[4px] text-[10px] font-extrabold text-white bg-[#3ea06a] rounded-[5px] px-[6px] py-[1px] leading-none">
-                                완료 ✓
-                              </span>
-                            )}
-                          </td>
-                          <td className="border-b border-r border-[#e6ead9] py-[6px] px-[10px] font-semibold text-textSub whitespace-nowrap min-w-[140px]">
+                      renderedGroupValues.push({
+                        name: 'gwan',
+                        rawSum: gwanSum,
+                        converted: cv,
+                        hasConvert: cat.convert
+                      });
+                    }
+
+                    return (
+                      <tr
+                        key={p.code}
+                        className="transition-all hover:bg-gray-50 border-b border-[#dde3ec] last:border-b-0"
+                        style={{
+                          backgroundColor: isComplete ? '#f2f7ea' : idx % 2 === 1 ? '#fbfcf8' : '#ffffff'
+                        }}
+                      >
+                        {/* 제품분류코드 */}
+                        <td className="sticky left-0 bg-inherit border-r border-[#cbd3e1] py-[8px] px-[8px] text-center z-10 whitespace-nowrap">
+                          <div className={`font-extrabold text-[15px] leading-none ${buman.cat === 'woolisul' ? 'text-[#284c7d]' : 'text-[#3f5a26]'}`}>
+                            {p.code}
+                          </div>
+                          {isComplete && (
+                            <span className="inline-block mt-[4px] text-[10px] font-extrabold text-white bg-[#3ea06a] rounded-[5px] px-[6px] py-[1px] leading-none">
+                              완료 ✓
+                            </span>
+                          )}
+                          {buman.test === '블라인드' && (
+                            <div className="mt-[2px] text-[10px] text-[#9aa6bb]">블라인드</div>
+                          )}
+                        </td>
+                        
+                        {/* 제품명 */}
+                        {buman.test !== '블라인드' && (
+                          <td className="border-r border-[#cbd3e1] py-[8px] px-[10px] font-semibold text-textSub whitespace-nowrap min-w-[140px]">
                             {p.name}
                           </td>
-                          
-                          {/* 관능 평가 항목 셀 */}
-                          {cat.gwan.map(it => {
-                            const val = pScores[it.key];
+                        )}
+                        
+                        {/* 각 대그룹 루프 */}
+                        {hasServerTemplate ? (
+                          serverBumanTemplate.map(g => {
+                            const gItems = g.items || [];
+                            const gVal = renderedGroupValues.find(v => v.name === g.name);
                             return (
-                              <td key={it.key} className="border-b border-r border-[#e6ead9] p-[6px] text-center">
-                                <button
-                                  onClick={() => setModal({ code: p.code, itemKey: it.key })}
-                                  className={`w-full h-[30px] rounded-[6px] border transition-all cursor-pointer ${
-                                    val !== undefined
-                                      ? 'border-[#b58a2e] bg-[#f3e2b8] text-[#8a640f] font-extrabold text-[15px]'
-                                      : 'border-[#d3dae5] bg-white text-[#9aa6bb] text-[12px] font-bold tracking-[1px]'
-                                  }`}
-                                >
-                                  {val !== undefined ? val : '입력'}
-                                </button>
-                              </td>
+                              <React.Fragment key={g.name}>
+                                {gItems.map(it => {
+                                  const val = pScores[String(it.id)];
+                                  return (
+                                    <td key={it.id} className="border-r border-[#cbd3e1] p-[6px] text-center">
+                                      <button
+                                        onClick={() => setModal({ code: p.code, itemKey: String(it.id) })}
+                                        className={`w-full h-[32px] rounded-[6px] border transition-all cursor-pointer ${
+                                          val !== undefined
+                                            ? 'border-[#b58a2e] bg-[#f3e2b8] text-[#8a640f] font-extrabold text-[15px]'
+                                            : 'border-[#d3dae5] bg-white text-[#9aa6bb] text-[12px] font-bold tracking-[1px]'
+                                        }`}
+                                      >
+                                        {val !== undefined ? val : '입력'}
+                                      </button>
+                                    </td>
+                                  );
+                                })}
+                                {gVal && gVal.hasConvert && (
+                                  <td className="border-r border-[#cbd3e1] p-[6px] text-center bg-[#f6f9ef] font-extrabold text-[#5a7a3f] text-[14px]">
+                                    {gVal.converted}
+                                  </td>
+                                )}
+                              </React.Fragment>
                             );
-                          })}
-
-                          {/* 환산 칼럼 */}
-                          <td className="border-b border-r border-[#e6ead9] p-[6px] text-center bg-[#f6f9ef] font-extrabold text-[#5a7a3f] text-[14px]">
-                            {cv}
-                          </td>
-
-                          {/* 상품성 평가 항목 셀 */}
-                          {cat.sang.map(it => {
-                            const val = pScores[it.key];
-                            return (
-                              <td key={it.key} className="border-b border-r border-[#e6ead9] p-[6px] text-center">
-                                <button
-                                  onClick={() => setModal({ code: p.code, itemKey: it.key })}
-                                  className={`w-full h-[30px] rounded-[6px] border transition-all cursor-pointer ${
-                                    val !== undefined
-                                      ? 'border-[#b58a2e] bg-[#f3e2b8] text-[#8a640f] font-extrabold text-[15px]'
-                                      : 'border-[#d3dae5] bg-white text-[#9aa6bb] text-[12px] font-bold tracking-[1px]'
-                                  }`}
-                                >
-                                  {val !== undefined ? val : '입력'}
-                                </button>
+                          })
+                        ) : (
+                          // 로컬 fallback
+                          <>
+                            {cat.gwan.map(it => {
+                              const val = pScores[it.key];
+                              return (
+                                <td key={it.key} className="border-r border-[#cbd3e1] p-[6px] text-center">
+                                  <button
+                                    onClick={() => setModal({ code: p.code, itemKey: it.key })}
+                                    className={`w-full h-[32px] rounded-[6px] border transition-all cursor-pointer ${
+                                      val !== undefined
+                                        ? 'border-[#b58a2e] bg-[#f3e2b8] text-[#8a640f] font-extrabold text-[15px]'
+                                        : 'border-[#d3dae5] bg-white text-[#9aa6bb] text-[12px] font-bold tracking-[1px]'
+                                    }`}
+                                  >
+                                    {val !== undefined ? val : '입력'}
+                                  </button>
+                                </td>
+                              );
+                            })}
+                            {cat.convert && (
+                              <td className="border-r border-[#cbd3e1] p-[6px] text-center bg-[#f6f9ef] font-extrabold text-[#5a7a3f] text-[14px]">
+                                {renderedGroupValues[0]?.converted}
                               </td>
-                            );
-                          })}
-
-                          {/* 소계 칼럼 */}
-                          <td className="border-b p-[6px] text-center bg-[#fbf6e8] whitespace-nowrap">
-                            <span className="text-[19px] font-extrabold text-[#b58a2e]">
-                              {subtotal}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* 우리술 평가 테이블 (convert === false) */}
-            {buman.cat === 'woolisul' && (
-              <div className="overflow-x-auto w-full border border-[#b9cbe6] rounded-[10px]">
-                <table className="border-collapse border-spacing-0 text-[13px] min-w-[700px] w-full bg-white overflow-hidden">
-                  <thead>
-                    <tr>
-                      <th rowSpan={3} className="sticky top-0 left-0 z-20 bg-[#cddcf0] text-[#284c7d] border-b-2 border-r border-[#b9cbe6] p-[8px] w-[120px] font-extrabold text-center">
-                        제품<br />분류코드
-                      </th>
-                      <th colSpan={5} className="sticky top-0 z-10 h-[32px] bg-[#dae7f6] text-[#2f5488] border-b border-r border-[#b7cbe8] font-extrabold text-center">
-                        관능 평가 (환산 없음)
-                      </th>
-                      <th rowSpan={3} className="sticky top-0 z-10 bg-[#cddcf0] text-[#284c7d] border-b-2 border-[#b9cbe6] p-[8px] w-[88px] font-extrabold text-center">
-                        소계<br />(120)
-                      </th>
-                    </tr>
-                    <tr>
-                      {cat.gwan.map(it => (
-                        <th key={it.key} className="sticky top-[32px] h-[30px] z-10 bg-[#eef4fb] text-[#2f5488] border-b border-r border-[#d3e0f1] p-[6px] font-bold text-center whitespace-nowrap">
-                          {it.name}
-                        </th>
-                      ))}
-                    </tr>
-                    <tr>
-                      {cat.gwan.map(it => (
-                        <th key={it.key} className="sticky top-[62px] z-10 bg-[#f7faff] border-b-2 border-r border-[#b9cbe6] p-[4px] text-center">
-                          <div className="text-[15px] font-extrabold text-[#b58a2e]">{it.max}</div>
-                          <div className="text-[10px] text-[#9aa6bb]">{it.scale.join('·')}</div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {products.map((p, idx) => {
-                      const pScores = bScores[p.code] || {};
-                      
-                      // 관능 총합 계산
-                      const gwanSum = cat.gwan.reduce((sum, it) => sum + (pScores[it.key] || 0), 0);
-                      
-                      // 제품 완료 여부 체크
-                      const isComplete = activeItems.every(it => pScores[it.key] !== undefined);
-                      
-                      return (
-                        <tr
-                          key={p.code}
-                          className="transition-all hover:bg-gray-50"
-                          style={{
-                            backgroundColor: isComplete ? '#eaf3fb' : idx % 2 === 1 ? '#f7fafd' : '#ffffff'
-                          }}
-                        >
-                          <td className="sticky left-0 bg-inherit border-b border-r border-[#e3ebf5] py-[10px] text-center z-10 whitespace-nowrap">
-                            <div className="font-extrabold text-[#284c7d] text-[16px] leading-none">
-                              {p.code}
-                            </div>
-                            {isComplete && (
-                              <span className="inline-block mt-[4px] text-[10px] font-extrabold text-white bg-[#3ea06a] rounded-[5px] px-[6px] py-[1px] leading-none">
-                                완료 ✓
-                              </span>
                             )}
-                            <div className="mt-[2px] text-[10px] text-[#9aa6bb]">블라인드</div>
-                          </td>
-                          
-                          {/* 관능 평가 항목 셀 */}
-                          {cat.gwan.map(it => {
-                            const val = pScores[it.key];
-                            return (
-                              <td key={it.key} className="border-b border-r border-[#e3ebf5] py-[8px] px-[6px] text-center">
-                                <button
-                                  onClick={() => setModal({ code: p.code, itemKey: it.key })}
-                                  className={`w-full h-[30px] rounded-[6px] border transition-all cursor-pointer ${
-                                    val !== undefined
-                                      ? 'border-[#b58a2e] bg-[#f3e2b8] text-[#8a640f] font-extrabold text-[15px]'
-                                      : 'border-[#d3dae5] bg-white text-[#9aa6bb] text-[12px] font-bold tracking-[1px]'
-                                  }`}
-                                >
-                                  {val !== undefined ? val : '입력'}
-                                </button>
-                              </td>
-                            );
-                          })}
-
-                          {/* 소계 칼럼 */}
-                          <td className="border-b py-[8px] px-[6px] text-center bg-[#f4f8fd] whitespace-nowrap">
-                            <span className="text-[19px] font-extrabold text-[#b58a2e]">
-                              {gwanSum}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                            {cat.sang.map(it => {
+                              const val = pScores[it.key];
+                              return (
+                                <td key={it.key} className="border-r border-[#cbd3e1] p-[6px] text-center">
+                                  <button
+                                    onClick={() => setModal({ code: p.code, itemKey: it.key })}
+                                    className={`w-full h-[32px] rounded-[6px] border transition-all cursor-pointer ${
+                                      val !== undefined
+                                        ? 'border-[#b58a2e] bg-[#f3e2b8] text-[#8a640f] font-extrabold text-[15px]'
+                                        : 'border-[#d3dae5] bg-white text-[#9aa6bb] text-[12px] font-bold tracking-[1px]'
+                                    }`}
+                                  >
+                                    {val !== undefined ? val : '입력'}
+                                  </button>
+                                </td>
+                              );
+                            })}
+                          </>
+                        )}
+                        
+                        {/* 소계 합산 칼럼 */}
+                        <td className="p-[6px] text-center bg-[#fbf6e8] whitespace-nowrap">
+                          <span className="text-[19px] font-extrabold text-[#b58a2e]">
+                            {subtotal}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             
             {/* 테이블 안내 주석 */}
             <div className="mt-[12px] text-[12px] text-[#8b97ab] leading-[1.7]">
-              {buman.cat === 'ricefood'
-                ? '※ 오픈테스트 — 제품명·코드 표시. 관능평가 100점을 70점으로 자동 환산 후 상품성 50점과 합산해 120점 만점으로 소계 산출.'
-                : '※ 블라인드 테스트 — 제품명 미노출, 제품분류코드만 표시. 5개 항목 합계를 그대로 120점 만점으로 소계 산출 (별도 환산·상품성평가 없음).'}
+              {buman.test === '블라인드'
+                ? '※ 블라인드 테스트 — 제품명 미노출, 제품분류코드만 표시. 설정된 배점 합계를 그대로 소계로 산출합니다.'
+                : '※ 오픈테스트 — 제품명·코드 표시. 설정된 배점에 맞추어 각 그룹 평가 및 환산 점수 소계가 산출됩니다.'}
             </div>
           </div>
         </div>
@@ -801,7 +1001,7 @@ function App() {
                   <div>
                     <div className="text-[21px] font-extrabold leading-none">{mItem?.name} ({modal.code})</div>
                     <div className="mt-[5px] text-[13px] text-textBlue leading-none">
-                      배점 {mItem?.max}점 · 척도 5단계
+                      배점 {mItem?.max}점 · 척도 {mItem?.scale?.length || 0}단계
                     </div>
                   </div>
                   <div className="text-right shrink-0 leading-none">
@@ -819,14 +1019,14 @@ function App() {
                   </div>
                   
                   {/* 척도 버튼 목록 */}
-                  <div className="flex gap-[12px]">
-                    {mItem?.scale.map((scoreValue) => {
+                  <div className="flex gap-[12px] flex-wrap justify-center">
+                    {(mItem?.scale || []).map((scoreValue) => {
                       const isSelected = currentVal === scoreValue;
                       return (
                         <button
                           key={scoreValue}
                           onClick={() => pickScore(modal.code, modal.itemKey, scoreValue)}
-                          className={`flex-1 h-[92px] rounded-[14px] border-2 transition-all text-[30px] font-extrabold cursor-pointer ${
+                          className={`min-w-[75px] flex-1 h-[80px] rounded-[14px] border-2 transition-all text-[26px] font-extrabold cursor-pointer ${
                             isSelected
                               ? 'border-primary bg-primary text-white shadow-md'
                               : 'border-[#d3dae5] bg-white text-textSub hover:border-gray-400'

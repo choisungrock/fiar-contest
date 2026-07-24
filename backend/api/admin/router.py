@@ -40,13 +40,14 @@ class CreateGroupRequest(BaseModel):
     name: str
     period: str
     status: str
+    code: str
 
 @router.get("/groups")
 def get_groups():
     """등록된 대그룹(품평회 대회) 목록 조회 API"""
     try:
         with engine.connect() as conn:
-            res_groups = conn.execute(text("SELECT fg_id, fg_name, fg_period, fg_status FROM fair_group ORDER BY fg_id ASC"))
+            res_groups = conn.execute(text("SELECT fg_id, fg_name, fg_period, fg_status, fg_code FROM fair_group ORDER BY fg_id ASC"))
             groups_list = []
             
             for row in res_groups:
@@ -54,6 +55,7 @@ def get_groups():
                 g_name = row[1]
                 g_period = row[2]
                 g_status = row[3]
+                g_code = row[4]
                 
                 # 부문, 평가자, 제품 갯수 카운트
                 buman_count = conn.execute(text("SELECT COUNT(*) FROM fair_buman WHERE fb_fg_id = :fg_id"), {"fg_id": g_id}).scalar() or 0
@@ -74,6 +76,7 @@ def get_groups():
                     "name": g_name,
                     "period": g_period,
                     "status": g_status,
+                    "code": g_code,
                     "progress": progress,
                     "bumanCount": buman_count,
                     "judgeCount": judge_count,
@@ -96,8 +99,8 @@ def create_group(req: CreateGroupRequest):
             trans = conn.begin()
             try:
                 conn.execute(
-                    text("INSERT INTO fair_group (fg_name, fg_period, fg_status) VALUES (:name, :period, :status)"),
-                    {"name": req.name, "period": req.period, "status": req.status}
+                    text("INSERT INTO fair_group (fg_name, fg_period, fg_status, fg_code) VALUES (:name, :period, :status, :code)"),
+                    {"name": req.name, "period": req.period, "status": req.status, "code": req.code}
                 )
                 trans.commit()
                 return {
@@ -149,6 +152,7 @@ class EvaluationTemplateItem(BaseModel):
 
 class SaveDetailsRequest(BaseModel):
     systemName: str
+    systemCode: str = ""
     period: str = ""
     status: str = "진행중"
     judges: list[JudgeItem]
@@ -162,7 +166,7 @@ def get_group_details(fg_id: int):
     try:
         with engine.connect() as conn:
             g_row = conn.execute(
-                text("SELECT fg_name, fg_period, fg_status FROM fair_group WHERE fg_id = :fg_id"),
+                text("SELECT fg_name, fg_period, fg_status, fg_code FROM fair_group WHERE fg_id = :fg_id"),
                 {"fg_id": fg_id}
             ).first()
             if not g_row:
@@ -171,6 +175,7 @@ def get_group_details(fg_id: int):
             system_name = g_row[0]
             period = g_row[1] or ""
             status = g_row[2] or "진행중"
+            system_code = g_row[3] or ""
 
             # 심사위원
             res_judges = conn.execute(
@@ -275,6 +280,7 @@ def get_group_details(fg_id: int):
             return {
                 "status": "success",
                 "systemName": system_name,
+                "systemCode": system_code,
                 "period": period,
                 "groupStatus": status,
                 "judges": judges_list,
@@ -294,8 +300,8 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest):
             try:
                 # 1. 대회 정보 업데이트
                 conn.execute(
-                    text("UPDATE fair_group SET fg_name = :name, fg_period = :period, fg_status = :status WHERE fg_id = :fg_id"),
-                    {"name": req.systemName, "period": req.period, "status": req.status, "fg_id": fg_id}
+                    text("UPDATE fair_group SET fg_name = :name, fg_period = :period, fg_status = :status, fg_code = :code WHERE fg_id = :fg_id"),
+                    {"name": req.systemName, "period": req.period, "status": req.status, "code": req.systemCode, "fg_id": fg_id}
                 )
 
                 # 2. 기존 종속 관계 데이터 삭제
