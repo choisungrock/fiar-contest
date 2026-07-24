@@ -65,10 +65,52 @@ def get_groups():
                     "SELECT COUNT(*) FROM fair_product p JOIN fair_buman b ON p.fp_fb_id = b.fb_id WHERE b.fb_fg_id = :fg_id"
                 ), {"fg_id": g_id}).scalar() or 0
                 
-                # 진행률 기본 매칭값
+                # 실시간 진행률 연산
+                total_template_items = 0
+                buman_rows = conn.execute(
+                    text("SELECT fb_id, fb_type FROM fair_buman WHERE fb_fg_id = :fg_id"), 
+                    {"fg_id": g_id}
+                ).all()
+                
+                for b_row in buman_rows:
+                    fb_id, fb_type = b_row[0], b_row[1]
+                    fet_id = conn.execute(
+                        text("SELECT fet_id FROM fair_evaluation_template WHERE fet_fg_id = :fg_id AND fet_target_type = 'specific_buman' AND fet_target_id = :fb_id"),
+                        {"fg_id": g_id, "fb_id": fb_id}
+                    ).scalar()
+                    
+                    if not fet_id:
+                        target_type = "open_all" if fb_type == "open" else "blind_all"
+                        fet_id = conn.execute(
+                            text("SELECT fet_id FROM fair_evaluation_template WHERE fet_fg_id = :fg_id AND fet_target_type = :target_type"),
+                            {"fg_id": g_id, "target_type": target_type}
+                        ).scalar()
+                        
+                    if fet_id:
+                        item_count = conn.execute(
+                            text("SELECT COUNT(*) FROM fair_evaluation_item WHERE fei_fet_id = :fet_id"),
+                            {"fet_id": fet_id}
+                        ).scalar() or 0
+                        p_count = conn.execute(
+                            text("SELECT COUNT(*) FROM fair_product WHERE fp_fb_id = :fb_id"),
+                            {"fb_id": fb_id}
+                        ).scalar() or 0
+                        total_template_items += p_count * item_count
+                        
+                total_target_cells = total_template_items * judge_count
+                actual_filled_cells = conn.execute(
+                    text("""
+                        SELECT COUNT(*) FROM fair_score_record r
+                        JOIN fair_product p ON r.fsr_fp_id = p.fp_id
+                        JOIN fair_buman b ON p.fp_fb_id = b.fb_id
+                        WHERE b.fb_fg_id = :fg_id
+                    """),
+                    {"fg_id": g_id}
+                ).scalar() or 0
+                
                 progress = 0
-                if g_status == '진행중':
-                    progress = 62
+                if total_target_cells > 0:
+                    progress = min(100, round((actual_filled_cells / total_target_cells) * 100))
                 elif g_status == '완료':
                     progress = 100
                 
@@ -465,3 +507,43 @@ def toggle_enroll(fg_id: int, req: EnrollToggleRequest):
             return {"status": "success", "enrollOpen": req.open}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"등록잠금 변경 오류: {str(e)}")
+
+@router.get("/groups/{fg_id}/results")
+def get_group_results(fg_id: int):
+    """특정 대회의 실시간 심사위원별 채점 데이터 일괄 집계 API"""
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text("""
+                    SELECT 
+                        r.fsr_fj_id, 
+                        p.fp_code, 
+                        r.fsr_fei_id, 
+                        r.fsr_score
+                    FROM fair_score_record r
+                    JOIN fair_product p ON r.fsr_fp_id = p.fp_id
+                    JOIN fair_buman b ON p.fp_fb_id = b.fb_id
+                    WHERE b.fb_fg_id = :fg_id
+                """),
+                {"fg_id": fg_id}
+            )
+            
+            scores_map = {}
+            for r in rows:
+                fj_id = str(r[0])
+                p_code = r[1]
+                fei_id = str(r[2])
+                score = r[3]
+                
+                if fj_id not in scores_map:
+                    scores_map[fj_id] = {}
+                if p_code not in scores_map[fj_id]:
+                    scores_map[fj_id][p_code] = {}
+                scores_map[fj_id][p_code][fei_id] = score
+                
+            return {
+                "status": "success",
+                "scores": scores_map
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"결과 데이터 집계 중 오류 발생: {str(e)}")

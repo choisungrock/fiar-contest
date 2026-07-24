@@ -80,6 +80,11 @@ function App() {
       return 'overview';
     }
   });
+  const formatScore = (val) => {
+    if (val === undefined || val === null || isNaN(val)) return '0';
+    return parseFloat(Number(val).toFixed(1));
+  };
+
   const [systemName, setSystemName] = useState('');
   const [systemCode, setSystemCode] = useState('');
   const [productBuman, setProductBuman] = useState('A');
@@ -113,6 +118,7 @@ function App() {
   const [activeTemplateId, setActiveTemplateId] = useState(null);
   const [devices, setDevices] = useState([]);
   const [enrollOpen, setEnrollOpen] = useState(true);
+  const [actualScores, setActualScores] = useState({});
 
   useEffect(() => {
     try {
@@ -315,11 +321,42 @@ function App() {
     }
   };
 
+  // 특정 품평회 결과 일괄 집계 로딩 API 연동 함수
+  const fetchResults = async (groupId) => {
+    try {
+      const response = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/results?_=${Date.now()}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === "success") {
+          setActualScores(data.scores || {});
+        }
+      }
+    } catch (e) {
+      console.error("[fetchResults] 결과 데이터 API 호출 실패:", e);
+    }
+  };
+
   useEffect(() => {
     if (isAuthed && view === 'console' && activeGroup) {
       fetchGroupDetails(activeGroup);
+      if (section === 'results') {
+        fetchResults(activeGroup);
+      }
     }
-  }, [isAuthed, view, activeGroup]);
+  }, [isAuthed, view, activeGroup, section]);
+
+  // 결과 탭 활성화 시 3초 간격 실시간 자동 데이터 폴링 갱신 효과
+  useEffect(() => {
+    let timer = null;
+    if (isAuthed && view === 'console' && activeGroup && section === 'results') {
+      timer = setInterval(() => {
+        fetchResults(activeGroup);
+      }, 3000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isAuthed, view, activeGroup, section]);
 
   // 브라우저 새로고침 및 탭 닫기 이탈 가드
   useEffect(() => {
@@ -2026,9 +2063,12 @@ function App() {
                 || templates.find(t => t.target_type === (bumanType === 'blind' ? 'blind_all' : 'open_all'));
 
               // 2. 심사위원별 상세 채점 점수 분리 배분(Distribution) 시뮬레이션 헬퍼 정의
-              const getJudgeDetailedScores = (pIdx, jIdx, p) => {
-                const h = hashStr(p.code);
-                const baseRatio = 0.78 + ((h + pIdx * 13 + jIdx * 7) % 21) / 100;
+               const getJudgeDetailedScores = (pIdx, jIdx, p) => {
+                const jObj = judges[jIdx];
+                const judgeIdKey = String(jObj?.id);
+                const pScores = actualScores[judgeIdKey]?.[p.code] || {};
+                const filledCount = Object.keys(pScores).length;
+                const hasScores = filledCount > 0;
 
                 const groupResults = [];
                 let totalRawScore = 0;
@@ -2040,75 +2080,94 @@ function App() {
                     const gMaxRaw = (g.items || []).reduce((sum, it) => sum + (parseInt(it.max) || 0), 0);
                     const gConvertTo = parseInt(g.convertTo) || 0;
 
-                    let gRawScore = Math.round(gMaxRaw * baseRatio);
-                    let assignedRawSum = 0;
+                    let gRawScore = 0;
                     const gItems = g.items || [];
 
-                    gItems.forEach((it, idx) => {
-                      const itMax = parseInt(it.max) || 0;
-                      let itScore = 0;
-                      if (idx === gItems.length - 1) {
-                        itScore = Math.max(0, gRawScore - assignedRawSum);
-                      } else {
-                        itScore = Math.round(itMax * baseRatio);
-                        assignedRawSum += itScore;
-                      }
-                      itScore = Math.min(itMax, itScore);
+                    gItems.forEach((it) => {
+                      const itScore = pScores[String(it.id)] !== undefined ? pScores[String(it.id)] : 0;
                       itemScoresMap[it.id] = itScore;
+                      gRawScore += itScore;
                     });
 
-                    const actualRawSum = gItems.reduce((sum, it) => sum + (itemScoresMap[it.id] || 0), 0);
-
-                    let gConverted = actualRawSum;
+                    let gConverted = gRawScore;
                     if (gConvertTo > 0 && gMaxRaw > 0) {
-                      gConverted = Math.round((actualRawSum / gMaxRaw) * gConvertTo);
+                      gConverted = Math.round((gRawScore / gMaxRaw) * gConvertTo * 10) / 10;
                     }
 
-                    totalRawScore += actualRawSum;
+                    totalRawScore += gRawScore;
                     totalConvertedScore += gConverted;
 
                     groupResults.push({
                       groupId: g.id,
-                      rawSum: actualRawSum,
+                      rawSum: gRawScore,
                       converted: gConverted
                     });
                   });
                 } else {
-                  const s120 = sampleScore(pIdx, jIdx, p.code);
-                  totalConvertedScore = s120;
+                  totalConvertedScore = 0;
                 }
 
                 return {
                   itemScores: itemScoresMap,
                   groupScores: groupResults,
                   totalRaw: totalRawScore,
-                  totalConverted: totalConvertedScore
+                  totalConverted: Math.round(totalConvertedScore * 10) / 10,
+                  hasScores
                 };
               };
 
+              // 완료된 심사위원 계산 (현재 부문의 모든 제품의 모든 항목에 점수를 채웠는지 판별)
+              const activeProductsList = products[rbk] || [];
+              const matchTemplateItems = [];
+              if (matchTemplate && matchTemplate.groups) {
+                matchTemplate.groups.forEach(g => {
+                  (g.items || []).forEach(it => {
+                    matchTemplateItems.push(String(it.id));
+                  });
+                });
+              }
+
+              const completedJudgesCount = judges.filter(j => {
+                const jScores = actualScores[String(j.id)] || {};
+                const hasData = activeProductsList.length > 0 && matchTemplateItems.length > 0;
+                if (!hasData) return false;
+                
+                return activeProductsList.every(p => {
+                  const pScores = jScores[p.code] || {};
+                  return matchTemplateItems.every(itemId => pScores[itemId] !== undefined && pScores[itemId] !== null);
+                });
+              }).length;
+
               // 각 제품별 심사위원 채점 매트릭스 데이터 생성
               const matrixList = (products[rbk] || []).map((p, pIdx) => {
-                const listScores = judges.map((j, jIdx) => {
-                  return getJudgeDetailedScores(pIdx, jIdx, p).totalConverted;
+                const judgeDetails = judges.map((j, jIdx) => {
+                  return getJudgeDetailedScores(pIdx, jIdx, p);
                 });
+
+                const listScores = judgeDetails.map(d => d.totalConverted);
+                const validScores = judgeDetails.filter(d => d.hasScores).map(d => d.totalConverted);
 
                 // 합계 연산
                 const rawTotal = listScores.reduce((sum, v) => sum + v, 0);
 
-                // 최고/최저 제외 연산
+                // 최고/최저 제외 연산 (실제 채점한 사람이 3명 이상일 때만 동작하도록 통제)
+                const canTrimReal = canTrim && (validScores.length >= 3);
                 let finalTotal = rawTotal;
                 let minIdx = -1;
                 let maxIdx = -1;
 
-                if (canTrim) {
-                  const sorted = [...listScores].sort((a, b) => a - b);
+                if (canTrimReal) {
+                  const sorted = [...validScores].sort((a, b) => a - b);
                   const minVal = sorted[0];
                   const maxVal = sorted[sorted.length - 1];
 
                   minIdx = listScores.indexOf(minVal);
-                  maxIdx = listScores.lastIndexOf(maxVal); // 동일 점수 시 분리
+                  maxIdx = listScores.lastIndexOf(maxVal); // 동일 점수 시 분류
 
                   finalTotal = rawTotal - minVal - maxVal;
+                } else {
+                  // trim을 할 수 없거나 입력 심사위원이 부족할 때는 입력된 모든 점수의 단순 합계를 최종 점수로 반영
+                  finalTotal = rawTotal;
                 }
 
                 return {
@@ -2160,31 +2219,46 @@ function App() {
 
               return (
                 <div className="space-y-5">
-                  {/* 부문 전환 탭 */}
-                  <div className="flex gap-2 flex-wrap">
-                    {bumans.filter(b => b.prefix).map((b) => {
-                      const active = b.prefix === resultBuman;
-                      return (
-                        <button
-                          key={b.id}
-                          onClick={() => setResultBuman(b.prefix)}
-                          className={`flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] cursor-pointer text-[14px] border transition-all ${active
-                            ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
-                            : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
-                            }`}
-                        >
-                          <span className="font-extrabold">{b.prefix}</span>
-                          <span className="opacity-90 font-semibold">{b.name}</span>
-                        </button>
-                      );
-                    })}
+                  {/* 부문 전환 탭 및 실시간 갱신 제어 */}
+                  <div className="flex justify-between items-center max-w-[1100px] flex-wrap gap-3">
+                    <div className="flex gap-2 flex-wrap">
+                      {bumans.filter(b => b.prefix).map((b) => {
+                        const active = b.prefix === resultBuman;
+                        return (
+                          <button
+                            key={b.id}
+                            onClick={() => setResultBuman(b.prefix)}
+                            className={`flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] cursor-pointer text-[14px] border transition-all ${active
+                              ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white font-extrabold'
+                              : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300'
+                              }`}
+                          >
+                            <span className="font-extrabold">{b.prefix}</span>
+                            <span className="opacity-90 font-semibold">{b.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-[12px] font-bold text-[#2f7a4f] flex items-center gap-1.5 bg-[#eef7f1] py-1.5 px-3 rounded-lg border border-[#d2ecd9]">
+                        <span className="inline-block w-2 h-2 bg-[#2f7a4f] rounded-full animate-ping"></span>
+                        실시간 갱신 중 (3초 간격)
+                      </span>
+                      <button
+                        onClick={() => fetchResults(activeGroup)}
+                        className="py-2 px-3 border border-[#dde3ec] bg-white hover:bg-gray-50 text-[#5a6a82] hover:text-[#1b2a4a] rounded-[10px] text-[13px] font-bold cursor-pointer transition-all flex items-center gap-1"
+                      >
+                        🔄 수동 갱신
+                      </button>
+                    </div>
                   </div>
 
                   {/* 대회 상태 통계 */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-[1100px]">
                     <div className="bg-white border border-[#e5e9f0] rounded-[14px] p-[18px] px-5">
                       <div className="text-[12px] text-[#8b97ab] font-semibold">완료된 심사위원</div>
-                      <div className="mt-1.5 text-[28px] font-extrabold text-[#1b2a4a] leading-none">{counts.judges} / {counts.judges}명</div>
+                      <div className="mt-1.5 text-[28px] font-extrabold text-[#1b2a4a] leading-none">{completedJudgesCount} / {judges.length}명</div>
                     </div>
                     <div className="bg-white border border-[#e5e9f0] rounded-[14px] p-[18px] px-5">
                       <div className="text-[12px] text-[#8b97ab] font-semibold">부문 제품 개수</div>
@@ -2193,13 +2267,13 @@ function App() {
                     <div className="bg-white border border-[#e5e9f0] rounded-[14px] p-[18px] px-5">
                       <div className="text-[12px] text-[#8b97ab] font-semibold">최고 합계 점수</div>
                       <div className="mt-1.5 text-[28px] font-extrabold text-[#284c7d] leading-none">
-                        {matrixList.length > 0 ? Math.max(...matrixList.map(m => m.finalTotal)) : 0}점
+                        {matrixList.length > 0 ? formatScore(Math.max(...matrixList.map(m => m.finalTotal))) : 0}점
                       </div>
                     </div>
                     <div className="bg-white border border-[#e5e9f0] rounded-[14px] p-[18px] px-5">
                       <div className="text-[12px] text-[#8b97ab] font-semibold">최저 합계 점수</div>
                       <div className="mt-1.5 text-[28px] font-extrabold text-[#c0392b] leading-none">
-                        {matrixList.length > 0 ? Math.min(...matrixList.map(m => m.finalTotal)) : 0}점
+                        {matrixList.length > 0 ? formatScore(Math.min(...matrixList.map(m => m.finalTotal))) : 0}점
                       </div>
                     </div>
                   </div>
@@ -2308,7 +2382,7 @@ function App() {
                                             : 'text-[#3a475c]'
                                           }`}
                                       >
-                                        {scoreVal}
+                                        {formatScore(scoreVal)}
                                         {isMax && <span className="block text-[9px] text-blue-500 font-extrabold leading-none mt-0.5">최고 제외</span>}
                                         {isMin && <span className="block text-[9px] text-red-500 font-extrabold leading-none mt-0.5">최저 제외</span>}
                                       </td>
@@ -2317,11 +2391,11 @@ function App() {
 
                                   {/* 원점수합 */}
                                   <td className="p-3 text-center font-bold text-[#2f5a3a] bg-[#f1f7f1] border-l border-[#f2f4f8]">
-                                    {m.total}
+                                    {formatScore(m.total)}
                                   </td>
                                   {/* 최종합계 */}
                                   <td className="p-3 text-center font-extrabold text-[16px] text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#f2f4f8]">
-                                    {m.finalTotal}
+                                    {formatScore(m.finalTotal)}
                                   </td>
                                   {/* 순위 */}
                                   <td className="p-3 text-center bg-[#f4f6fb] border-l border-[#f2f4f8]">
@@ -2465,15 +2539,15 @@ function App() {
                                   {/* 최종합계 내역 */}
                                   {/* 최종 배점합 */}
                                   <td className="p-3 text-center font-bold text-[#284c7d] bg-[#f0f4fa] border-l border-[#eef1f6]">
-                                    {r.detailed.totalRaw}
+                                    {formatScore(r.detailed.totalRaw)}
                                   </td>
                                   {/* 최종 환산점수 */}
                                   <td className="p-3 text-center font-extrabold text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#eef1f6]">
-                                    {r.detailed.totalConverted}
+                                    {formatScore(r.detailed.totalConverted)}
                                   </td>
                                   {/* 최종 환산 합계 */}
                                   <td className="p-3 text-center font-extrabold text-[15px] text-[#1b2a4a] bg-[#eaeffa] border-l border-[#eef1f6]">
-                                    {r.detailed.totalConverted}
+                                    {formatScore(r.detailed.totalConverted)}
                                   </td>
                                   {/* 로컬 순위 */}
                                   <td className="p-3 text-center bg-[#f4f6fb] border-l border-[#eef1f6]">
