@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 // 공통 네비게이션 명세
 const NAV = [
   { key: 'overview', icon: '▤', label: '시스템 개요' },
+  { key: 'devices', icon: '▣', label: '기기 관리' },
   { key: 'judges', icon: '◔', label: '평가자 등록' },
   { key: 'bumans', icon: '▦', label: '부문 등록' },
   { key: 'products', icon: '◇', label: '부문별 제품' },
@@ -110,6 +111,8 @@ function App() {
   const [products, setProducts] = useState({});
   const [templates, setTemplates] = useState([]);
   const [activeTemplateId, setActiveTemplateId] = useState(null);
+  const [devices, setDevices] = useState([]);
+  const [enrollOpen, setEnrollOpen] = useState(true);
 
   useEffect(() => {
     try {
@@ -138,6 +141,57 @@ function App() {
       console.error("대그룹 목록 API 호출 실패:", e);
     }
   };
+
+  // 기기 목록 조회
+  const fetchDevices = async (groupId) => {
+    try {
+      const res = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/devices`);
+      if (res.ok) {
+        const data = await res.json();
+        setDevices(data.devices || []);
+        setEnrollOpen(!!data.enrollOpen);
+      }
+    } catch (e) {
+      console.error("기기 목록 조회 실패:", e);
+    }
+  };
+
+  // 기기 상태 변경 (승인/대기/차단)
+  const changeDeviceStatus = async (fdId, status) => {
+    try {
+      const res = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/devices/${fdId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      if (res.ok) fetchDevices(activeGroup);
+      else alert("기기 상태 변경에 실패했습니다.");
+    } catch (e) {
+      console.error("기기 상태 변경 실패:", e);
+    }
+  };
+
+  // 신규 기기 등록 잠금 토글
+  const toggleEnroll = async (open) => {
+    try {
+      const res = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/enroll`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ open })
+      });
+      if (res.ok) setEnrollOpen(open);
+      else alert("등록 잠금 설정에 실패했습니다.");
+    } catch (e) {
+      console.error("등록 잠금 변경 실패:", e);
+    }
+  };
+
+  // 기기 목록 로드 (그룹 로드 시 카운트 표시 + 탭 진입 시 갱신)
+  useEffect(() => {
+    if (isAuthed && view === 'console' && activeGroup) {
+      fetchDevices(activeGroup);
+    }
+  }, [isAuthed, view, activeGroup, section]);
 
   useEffect(() => {
     if (isAuthed) {
@@ -729,7 +783,8 @@ function App() {
     judges: judges.length,
     bumans: bumans.length,
     products: Object.values(products).reduce((acc, list) => acc + list.length, 0),
-    items: templates.reduce((acc, t) => acc + (t.groups || []).reduce((sum, g) => sum + (g.items || []).length, 0), 0)
+    items: templates.reduce((acc, t) => acc + (t.groups || []).reduce((sum, g) => sum + (g.items || []).length, 0), 0),
+    devices: devices.filter(d => d.status === 'approved').length
   };
 
   // 1) 로그인하지 않은 상태 ➡️ 로그인 페이지 렌더링
@@ -998,7 +1053,7 @@ function App() {
           {NAV.map((n) => {
             const active = section === n.key;
             // 각 탭별 요약 카운트 매치
-            const cnt = n.key === 'judges' ? counts.judges : n.key === 'bumans' ? counts.bumans : n.key === 'products' ? counts.products : n.key === 'items' ? counts.items : '';
+            const cnt = n.key === 'judges' ? counts.judges : n.key === 'bumans' ? counts.bumans : n.key === 'products' ? counts.products : n.key === 'items' ? counts.items : n.key === 'devices' ? counts.devices : '';
 
             return (
               <button
@@ -1907,6 +1962,55 @@ function App() {
               </div>
             );
           })()}
+
+          {/* 기기 관리 (devices) */}
+          {section === 'devices' && (
+            <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[940px] shadow-sm">
+              <div className="grid grid-cols-[56px_1.4fr_110px_1.3fr_1fr_70px_84px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
+                <div className="p-3 text-center">No.</div>
+                <div className="p-3">기기 이름</div>
+                <div className="p-3 text-center">상태</div>
+                <div className="p-3">마지막 접속</div>
+                <div className="p-3">기기키</div>
+                <div className="p-3 text-center">승인</div>
+                <div className="p-3 text-center">관리</div>
+              </div>
+
+              {devices.length === 0 ? (
+                <div className="p-8 text-center text-[13px] text-[#8b97ab]">등록된 기기가 없습니다.</div>
+              ) : devices.map((d, idx) => (
+                <div key={d.id} className="grid grid-cols-[56px_1.4fr_110px_1.3fr_1fr_70px_84px] border-b border-[#eef1f6] items-center last:border-b-0">
+                  <div className="p-3 text-center font-bold text-[#8b97ab]">{idx + 1}</div>
+                  <div className="p-3 font-semibold text-primary text-[14px]">{d.label || '(이름 없음)'}</div>
+                  <div className="p-3 text-center">
+                    <span className={`inline-block px-2 py-1 rounded-md text-[11px] font-extrabold ${
+                      d.status === 'approved' ? 'bg-[#e6f4ec] text-[#2f7a4f]'
+                      : d.status === 'blocked' ? 'bg-[#fdecea] text-[#c0392b]'
+                      : 'bg-[#fff5e0] text-[#b58a2e]'}`}>
+                      {d.status === 'approved' ? '승인됨' : d.status === 'blocked' ? '차단됨' : '대기'}
+                    </span>
+                  </div>
+                  <div className="p-3 text-[13px] text-[#8b97ab]">{d.lastSeen || '-'}</div>
+                  <div className="p-3 text-[12px] text-[#9aa6bb]">…{(d.deviceKey || '').slice(-8)}</div>
+                  <div className="p-3 text-center">
+                    <input type="checkbox" checked={d.status === 'approved'} onChange={(e) => changeDeviceStatus(d.id, e.target.checked ? 'approved' : 'pending')} className="w-5 h-5 cursor-pointer" />
+                  </div>
+                  <div className="p-3 text-center">
+                    {d.status === 'blocked' ? (
+                      <button onClick={() => changeDeviceStatus(d.id, 'pending')} className="h-[34px] px-3 border border-[#dde3ec] bg-white hover:bg-gray-50 text-[#5a6a82] rounded-lg text-[12px] font-bold cursor-pointer transition-all">해제</button>
+                    ) : (
+                      <button onClick={() => changeDeviceStatus(d.id, 'blocked')} className="h-[34px] px-3 border border-red-200 bg-white hover:bg-red-50 text-[#c0392b] rounded-lg text-[12px] font-bold cursor-pointer transition-all">차단</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              <div className="p-3.5 bg-gray-50/50 flex items-center justify-between">
+                <span className="text-[13px] font-bold text-[#5a6a82]">신규 기기 등록 {enrollOpen ? '허용' : '잠금'}</span>
+                <input type="checkbox" checked={enrollOpen} onChange={(e) => toggleEnroll(e.target.checked)} className="w-5 h-5 cursor-pointer" />
+              </div>
+            </div>
+          )}
 
           {/* 6) 결과 집계 (results) */}
           {section === 'results' && (

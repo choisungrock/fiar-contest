@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS fair_group (
   fg_period VARCHAR(100),
   fg_status VARCHAR(20) DEFAULT '준비중',
   fg_code VARCHAR(100) NOT NULL UNIQUE,
+  fg_enroll_open TINYINT(1) NOT NULL DEFAULT 1,
   fg_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -75,6 +76,20 @@ CREATE TABLE IF NOT EXISTS fair_score_record (
   FOREIGN KEY (fsr_fp_id) REFERENCES fair_product(fp_id) ON DELETE CASCADE,
   FOREIGN KEY (fsr_fei_id) REFERENCES fair_evaluation_item(fei_id) ON DELETE CASCADE,
   UNIQUE KEY uq_fsr (fsr_fj_id, fsr_fp_id, fsr_fei_id)
+) ENGINE=InnoDB;
+
+-- 8. 기기 인증 테이블 (전용 태블릿 등록/승인)
+CREATE TABLE IF NOT EXISTS fair_device (
+  fd_id INT AUTO_INCREMENT PRIMARY KEY,
+  fd_fg_id INT NOT NULL,
+  fd_device_key VARCHAR(64) NOT NULL,
+  fd_label VARCHAR(100) DEFAULT '',
+  fd_status VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending | approved | blocked
+  fd_auth_key VARCHAR(128) DEFAULT NULL,
+  fd_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fd_last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (fd_fg_id) REFERENCES fair_group(fg_id) ON DELETE CASCADE,
+  UNIQUE KEY uq_device (fd_fg_id, fd_device_key)
 ) ENGINE=InnoDB;
 
 -- ==================== 초기 테스트 데이터 적재 ====================

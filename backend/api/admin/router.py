@@ -1,5 +1,6 @@
 # 관리자 기능 관련 API 요청을 처리하는 APIRouter 정의 파일
 import os
+import secrets
 from fastapi import APIRouter, HTTPException, status
 from typing import Union, Optional
 from pydantic import BaseModel
@@ -393,3 +394,74 @@ def get_results():
         "results": []
     }
 
+
+# ==================== 기기 관리 (전용 태블릿 등록/승인) ====================
+class DeviceStatusRequest(BaseModel):
+    status: str  # pending | approved | blocked
+
+class EnrollToggleRequest(BaseModel):
+    open: bool
+
+@router.get("/groups/{fg_id}/devices")
+def list_devices(fg_id: int):
+    """대회별 기기 목록 및 등록잠금 상태 조회 API"""
+    try:
+        with engine.connect() as conn:
+            enroll = conn.execute(text("SELECT fg_enroll_open FROM fair_group WHERE fg_id = :fg"), {"fg": fg_id}).scalar()
+            rows = conn.execute(
+                text("SELECT fd_id, fd_device_key, fd_label, fd_status, fd_last_seen FROM fair_device WHERE fd_fg_id = :fg ORDER BY fd_id ASC"),
+                {"fg": fg_id}
+            )
+            devices = []
+            for r in rows:
+                devices.append({
+                    "id": r[0],
+                    "deviceKey": r[1],
+                    "label": r[2] or "",
+                    "status": r[3],
+                    "lastSeen": str(r[4]) if r[4] else ""
+                })
+            return {"status": "success", "enrollOpen": bool(enroll), "devices": devices}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"기기 목록 조회 오류: {str(e)}")
+
+@router.post("/groups/{fg_id}/devices/{fd_id}/status")
+def set_device_status(fg_id: int, fd_id: int, req: DeviceStatusRequest):
+    """기기 상태 변경 API (approved 로 바꿀 때 인증키 발급)"""
+    if req.status not in ('pending', 'approved', 'blocked'):
+        raise HTTPException(status_code=400, detail="유효하지 않은 상태값입니다.")
+    try:
+        with engine.connect() as conn:
+            cur = conn.execute(
+                text("SELECT fd_auth_key FROM fair_device WHERE fd_id = :id AND fd_fg_id = :fg"),
+                {"id": fd_id, "fg": fg_id}
+            ).first()
+            if not cur:
+                raise HTTPException(status_code=404, detail="기기를 찾을 수 없습니다.")
+            auth_key = cur[0]
+            if req.status == 'approved' and not auth_key:
+                auth_key = secrets.token_hex(32)
+            conn.execute(
+                text("UPDATE fair_device SET fd_status = :st, fd_auth_key = :ak WHERE fd_id = :id AND fd_fg_id = :fg"),
+                {"st": req.status, "ak": auth_key, "id": fd_id, "fg": fg_id}
+            )
+            conn.commit()
+            return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"기기 상태 변경 오류: {str(e)}")
+
+@router.post("/groups/{fg_id}/enroll")
+def toggle_enroll(fg_id: int, req: EnrollToggleRequest):
+    """대회 등록잠금(신규 기기 등록 허용/차단) 토글 API"""
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text("UPDATE fair_group SET fg_enroll_open = :v WHERE fg_id = :fg"),
+                {"v": 1 if req.open else 0, "fg": fg_id}
+            )
+            conn.commit()
+            return {"status": "success", "enrollOpen": req.open}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"등록잠금 변경 오류: {str(e)}")

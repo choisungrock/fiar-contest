@@ -1,5 +1,12 @@
 // K-라이스페스타 전문가 품평회 평가자용 종합 앱 (로그인, 채점 시트, 팝업 모달, 결과 리포트 통합)
 import React, { useState, useEffect } from 'react';
+import {
+  cacheInit, getCachedInit,
+  saveSession, getSession,
+  saveScoreCell, deleteScoreCell, loadJudgeScores,
+  getPendingCells, markCellSynced,
+  getDeviceKey,
+} from './db';
 
 // 디자인 시안의 상수 데이터 이식
 const ITEMS = {
@@ -44,21 +51,13 @@ const BUMANS = [
   { key: 'ra', cat: 'woolisul', name: '증류주', prefix: '라', test: '블라인드 · 임시(우리술 동일 구조)' },
 ];
 
-const NAMES = {
-  A: ['미라클누룽지', '황금누룽지', '우리쌀김밥', '매콤쌀떡볶이', '현미누룽지칩', '수제쌀강정', '가마솥누룽지', '쌀치즈피자'],
-  B: ['유기농쌀가루', '발아현미믹스', '즉석쌀죽', '쌀식빵프리믹스', '글루텐프리쌀빵', '쌀시리얼', '건강쌀국수', '쌀누들'],
-  C: ['농협햇쌀', '친환경백미', '고시히카리', '신동진쌀', '오분도미', '찰현미', '흑미세트', '영양잡곡'],
-};
-
-const COUNT = 8;
 
 function App() {
-  // 쿼리 파라미터 또는 경로 파라미터에서 groupName 추출 (예: /krice2026)
-  const params = new URLSearchParams(window.location.search);
-  const queryGroup = params.get('groupName');
-  const pathGroup = window.location.pathname.replace(/^\/+/, '');
-  const groupName = queryGroup || pathGroup || 'krice2026';
+  // 경로 파라미터에서만 groupName 추출 (예: /krice2026)
+  const pathGroup = window.location.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
+  const groupName = pathGroup;
 
+  const [access, setAccess] = useState('checking'); // checking | granted | denied
   const [screen, setScreen] = useState('start'); // start | eval | done
   const [judgeName, setJudgeName] = useState('');
   const [judgeId, setJudgeId] = useState(null);
@@ -74,69 +73,179 @@ function App() {
   const [bumans, setBumans] = useState(BUMANS);
   const [productsMap, setProductsMap] = useState({});
   const [templatesMap, setTemplatesMap] = useState({});
+  const [judges, setJudges] = useState([]);
+  const [deviceKey, setDeviceKey] = useState('');
+  const [authKey, setAuthKey] = useState(null);
+  const [deviceStatus, setDeviceStatus] = useState('checking'); // checking|pending|approved|blocked|rejected|offline
+  const [deviceLabel, setDeviceLabel] = useState('');
 
-  // 컴포넌트 마운트 시 로컬스토리지 복구
+  // 마운트 시 로컬 세션(평가자/완료 상태) 복구
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('kricefesta_eval_v2');
-      if (raw) {
-        const d = JSON.parse(raw);
-        if (d.judgeName) setJudgeName(d.judgeName);
-        if (d.judgeId) setJudgeId(d.judgeId);
-        if (d.scores) setScores(d.scores);
-        if (d.completed) setCompleted(d.completed);
-      }
-    } catch (e) {
-      console.error('LocalStorage 복구 에러:', e);
-    }
-  }, []);
-
-  // 대회 초기화 동적 메타데이터 로드
-  useEffect(() => {
-    const loadInitData = async () => {
+    if (!groupName) return;
+    (async () => {
       try {
-        const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/init`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.systemName) setSystemName(data.systemName);
-          if (data.period) setPeriod(data.period);
-          if (data.bumans && data.bumans.length > 0) {
-            const mappedBumans = data.bumans.map(b => {
-              const isWoolisul = b.group === '우리술' || b.name.includes('주') || b.name.includes('술');
-              return {
-                key: b.prefix,
-                cat: isWoolisul ? 'woolisul' : 'ricefood',
-                name: b.name,
-                prefix: b.prefix,
-                test: b.type === 'open' ? '오픈테스트' : '블라인드'
-              };
-            });
-            setBumans(mappedBumans);
-            setSelectedBuman(mappedBumans[0].prefix);
-          }
-          if (data.products) setProductsMap(data.products);
-          if (data.templates) setTemplatesMap(data.templates);
+        const sess = await getSession(groupName);
+        if (sess) {
+          if (sess.judgeName) setJudgeName(sess.judgeName);
+          if (sess.judgeId) setJudgeId(sess.judgeId);
+          if (sess.completed) setCompleted(sess.completed);
+          if (sess.deviceLabel) setDeviceLabel(sess.deviceLabel);
         }
       } catch (e) {
-        console.error("대회 초기 데이터 로딩 에러:", e);
+        console.error('세션 복구 에러:', e);
       }
-    };
-    loadInitData();
+    })();
   }, [groupName]);
 
-  // 영속화 헬퍼
-  const persist = (nextState) => {
-    try {
-      const current = {
-        judgeName: nextState.judgeName ?? judgeName,
-        judgeId: nextState.judgeId ?? judgeId,
-        scores: nextState.scores ?? scores,
-        completed: nextState.completed ?? completed,
-      };
-      localStorage.setItem('kricefesta_eval_v2', JSON.stringify(current));
-    } catch (e) {
-      console.error('LocalStorage 저장 에러:', e);
+  // 온라인 복귀 시 미동기화 점수 자동 전송
+  useEffect(() => {
+    const onOnline = () => {
+      const nm = judgeName.trim();
+      if (judgeId && nm) syncPending(nm, judgeId);
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [judgeId, judgeName, groupName, deviceKey, authKey]);
+
+  // 대회 초기화: 온라인이면 서버 로드+캐시, 오프라인이면 캐시로 진입 검증
+  useEffect(() => {
+    if (!groupName) {
+      setAccess('denied');
+      return;
     }
+    const applyInit = (data) => {
+      if (data.systemName) setSystemName(data.systemName);
+      if (data.period) setPeriod(data.period);
+      if (data.bumans && data.bumans.length > 0) {
+        const mappedBumans = data.bumans.map(b => {
+          const isWoolisul = b.group === '우리술' || b.name.includes('주') || b.name.includes('술');
+          return {
+            key: b.prefix,
+            cat: isWoolisul ? 'woolisul' : 'ricefood',
+            group: b.group || '',
+            name: b.name,
+            prefix: b.prefix,
+            test: b.type === 'open' ? '오픈테스트' : '블라인드'
+          };
+        });
+        setBumans(mappedBumans);
+        setSelectedBuman(mappedBumans[0].prefix);
+      }
+      if (data.products) setProductsMap(data.products);
+      if (data.templates) setTemplatesMap(data.templates);
+      if (data.judges) setJudges(data.judges);
+    };
+    const run = async () => {
+      const dk = await getDeviceKey();
+      setDeviceKey(dk);
+      let sess = null;
+      try { sess = await getSession(groupName); } catch (se) { /* noop */ }
+      try {
+        // 1) 기기 상태만 확인 (저장 안 함 — 등록 요청 전에는 서버에 쌓이지 않음)
+        const reg = await fetch(`http://localhost:18000/api/user/groups/${groupName}/device/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceKey: dk })
+        });
+        const rdata = await reg.json();
+        setDeviceStatus(rdata.status);
+        if (rdata.status === 'approved' && rdata.authKey) {
+          setAuthKey(rdata.authKey);
+          await saveSession(groupName, { authKey: rdata.authKey, deviceStatus: 'approved' });
+          // 2) 승인 기기만 대회 데이터 수신
+          const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/init`, {
+            headers: { "X-Device-Key": dk, "X-Auth-Key": rdata.authKey }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            applyInit(data);
+            try { await cacheInit(groupName, data); } catch (ce) { console.error('대회 캐시 저장 에러:', ce); }
+            setAccess('granted');
+          } else {
+            setAccess('denied');
+          }
+        } else {
+          // pending | rejected | blocked
+          await saveSession(groupName, { deviceStatus: rdata.status });
+          setAccess('device');
+        }
+      } catch (e) {
+        // 오프라인: 캐시된 인증/대회 데이터로 진입 시도
+        console.error('기기 등록/초기화 오프라인 처리:', e);
+        try {
+          const cached = await getCachedInit(groupName);
+          if (sess && sess.deviceStatus === 'approved' && sess.authKey && cached) {
+            setAuthKey(sess.authKey);
+            setDeviceStatus('approved');
+            applyInit(cached);
+            setAccess('granted');
+          } else {
+            setDeviceStatus((sess && sess.deviceStatus) ? sess.deviceStatus : 'offline');
+            setAccess('device');
+          }
+        } catch (e2) {
+          console.error('오프라인 캐시 조회 에러:', e2);
+          setAccess('device');
+        }
+      }
+    };
+    run();
+  }, [groupName]);
+
+  // 기기 인증 헤더 (서버 전송 시 승인 기기 재확인용)
+  const authHeaders = () => ({
+    "Content-Type": "application/json",
+    "X-Device-Key": deviceKey,
+    "X-Auth-Key": authKey || ""
+  });
+
+  // 오프라인 중 저장된 미동기화(pending) 점수를 서버로 전송하고 synced 처리
+  const syncPending = async (name, jid) => {
+    if (!jid || !name) return;
+    try {
+      const pending = await getPendingCells(groupName, name);
+      for (const cell of pending) {
+        try {
+          const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify({
+              judgeId: jid,
+              productCode: cell.productCode,
+              itemId: isNaN(cell.itemId) ? 0 : parseInt(cell.itemId),
+              score: cell.score
+            })
+          });
+          if (res.ok) await markCellSynced(cell);
+          else break;
+        } catch (e) {
+          break; // 여전히 오프라인 → 다음 온라인에 재시도
+        }
+      }
+    } catch (e) {
+      console.error('점수 동기화 에러:', e);
+    }
+  };
+
+  // 평가자 확정 후 로컬 점수 로드 + 세션 저장 + 평가 화면 진입
+  const enterEval = async (name, jid, serverScores, isOnline) => {
+    setJudgeId(jid);
+    await saveSession(groupName, { judgeName: name, judgeId: jid });
+    // 온라인 로그인 시 서버 복원 점수를 로컬(synced)로 반영
+    if (isOnline && serverScores) {
+      for (const bk of Object.keys(serverScores)) {
+        for (const code of Object.keys(serverScores[bk])) {
+          for (const itemId of Object.keys(serverScores[bk][code])) {
+            await saveScoreCell({ groupName, judgeName: name, judgeId: jid, bumanKey: bk, productCode: code, itemId, score: serverScores[bk][code][itemId], syncStatus: 'synced' });
+          }
+        }
+      }
+    }
+    // 로컬(오프라인 입력 포함)을 최종 소스로 로드
+    const localScores = await loadJudgeScores(groupName, name);
+    setScores(localScores);
+    if (isOnline) await syncPending(name, jid);
+    navTo('eval');
   };
 
   // Toast 노출 제어
@@ -147,46 +256,87 @@ function App() {
     }, 2000);
   };
 
+  // 화면 이동 헬퍼: 브라우저 히스토리에 기록해 뒤로가기 지원
+  const navTo = (next) => {
+    window.history.pushState({ screen: next }, '');
+    setScreen(next);
+  };
+
+  // 브라우저 뒤로/앞으로 가기와 화면 상태 동기화
+  useEffect(() => {
+    window.history.replaceState({ screen: 'start' }, '');
+    const onPop = (e) => {
+      const st = e.state;
+      setScreen(st && st.screen ? st.screen : 'start');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   // 현재 활성 부문 객체 조회
   const buman = bumans.find((b) => b.key === selectedBuman) || bumans[0] || BUMANS[0];
+  // 로컬 카테고리 정의(관능/상품성 항목·환산 규칙). 서버 템플릿이 없을 때의 fallback 및 헤더·요약 표시에 사용
+  const cat = ITEMS[buman.cat] || ITEMS.ricefood;
   const serverBumanTemplate = templatesMap[selectedBuman];
   const hasServerTemplate = serverBumanTemplate && serverBumanTemplate.length > 0;
 
-  // 세부 항목 평면 배열 구성
-  let activeItems = [];
-  if (hasServerTemplate) {
-    serverBumanTemplate.forEach(g => {
-      (g.items || []).forEach(it => {
-        activeItems.push({
-          id: it.id,
-          key: String(it.id),
-          name: it.name,
-          max: it.max,
-          scale: it.scale,
-          groupName: g.name
+  // 부문 키로 활성 평가항목 평면 배열 구성 (관리자 등록 템플릿 우선, 없으면 로컬 기본값). 탭바/시트 공통 사용
+  const buildActiveItems = (bumanKey) => {
+    const tpl = templatesMap[bumanKey];
+    if (tpl && tpl.length > 0) {
+      const items = [];
+      tpl.forEach(g => {
+        (g.items || []).forEach(it => {
+          items.push({ id: it.id, key: String(it.id), name: it.name, max: it.max, scale: it.scale, groupName: g.name });
         });
       });
-    });
-  } else {
-    const cat = ITEMS[buman.cat];
-    activeItems = [
-      ...cat.gwan.map(x => ({ ...x, id: x.key, key: x.key, groupName: '관능평가' })),
-      ...cat.sang.map(x => ({ ...x, id: x.key, key: x.key, groupName: '상품성평가' }))
+      return items;
+    }
+    const b = bumans.find(x => x.key === bumanKey) || BUMANS.find(x => x.key === bumanKey) || BUMANS[0];
+    const c = ITEMS[b.cat] || ITEMS.ricefood;
+    return [
+      ...c.gwan.map(x => ({ ...x, id: x.key, key: x.key, groupName: '관능평가' })),
+      ...c.sang.map(x => ({ ...x, id: x.key, key: x.key, groupName: '상품성평가' }))
     ];
-  }
+  };
+  const activeItems = buildActiveItems(selectedBuman);
+
+  // 한 제품 점수맵으로 소계 계산 (관리자 템플릿 우선·환산 반영). 시트/결과요약 공통 사용
+  const calcSubtotal = (pScores, bumanKey) => {
+    const tpl = templatesMap[bumanKey];
+    if (tpl && tpl.length > 0) {
+      let total = 0;
+      tpl.forEach(g => {
+        const gSum = (g.items || []).reduce((sum, it) => sum + (pScores[String(it.id)] || 0), 0);
+        const gMax = (g.items || []).reduce((sum, it) => sum + (parseInt(it.max) || 0), 0);
+        const gConv = parseInt(g.convertTo) || 0;
+        total += (gConv > 0 && gMax > 0) ? Math.round((gSum / gMax) * gConv * 10) / 10 : gSum;
+      });
+      return Math.round(total * 10) / 10;
+    }
+    const b = bumans.find(x => x.key === bumanKey) || BUMANS.find(x => x.key === bumanKey) || BUMANS[0];
+    const c = ITEMS[b.cat] || ITEMS.ricefood;
+    const gwanSum = c.gwan.reduce((sum, it) => sum + (pScores[it.key] || 0), 0);
+    const sangSum = c.sang.reduce((sum, it) => sum + (pScores[it.key] || 0), 0);
+    const cv = c.convert ? Math.round(gwanSum * 0.7 * 10) / 10 : gwanSum;
+    return c.convert ? Math.round((cv + sangSum) * 10) / 10 : gwanSum;
+  };
+
+  // 현재 부문 소계 만점 (관리자 배점·환산 반영)
+  const subtotalMax = hasServerTemplate
+    ? Math.round(serverBumanTemplate.reduce((sum, g) => {
+        const gMax = (g.items || []).reduce((a, it) => a + (parseInt(it.max) || 0), 0);
+        const gConv = parseInt(g.convertTo) || 0;
+        return sum + (gConv > 0 ? gConv : gMax);
+      }, 0))
+    : (cat.convert
+        ? Math.round(cat.gwan.reduce((a, it) => a + (it.max || 0), 0) * 0.7) + cat.sang.reduce((a, it) => a + (it.max || 0), 0)
+        : cat.gwan.reduce((a, it) => a + (it.max || 0), 0));
 
   // 제품 목록 가져오기
   const getProductList = (bumanKey) => {
-    if (productsMap[bumanKey]) {
-      return productsMap[bumanKey];
-    }
-    const b = bumans.find((x) => x.key === bumanKey) || BUMANS[0];
-    return Array.from({ length: COUNT }, (_, i) => {
-      const num = i + 1;
-      const code = `${b.prefix}-${num}`;
-      const name = b.cat === 'woolisul' ? '블라인드 (코드만 노출)' : (NAMES[b.key]?.[i] || `${b.name} 제품 ${num}`);
-      return { code, name };
-    });
+    // 관리자에 등록된 제품만 사용. 미등록 부문은 빈 목록 반환(가짜 제품 생성하지 않음)
+    return productsMap[bumanKey] || [];
   };
 
   // 로그인 (시작) 확인
@@ -197,30 +347,57 @@ function App() {
       return;
     }
     
+    const name = judgeName.trim();
     try {
       const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ judgeName: judgeName.trim() })
+        headers: authHeaders(),
+        body: JSON.stringify({ judgeName: name })
       });
       if (res.ok) {
         const data = await res.json();
-        setJudgeId(data.judgeId);
-        if (data.scores) {
-          setScores(data.scores);
-          persist({ judgeName, scores: data.scores, judgeId: data.judgeId });
-        } else {
-          persist({ judgeName, judgeId: data.judgeId });
-        }
-        setScreen('eval');
+        await enterEval(name, data.judgeId, data.scores, true);
       } else {
-        alert("로그인 처리에 실패하였습니다.");
+        // 관리자에 등록된 평가자가 아니면 서버 메시지 그대로 노출하고 진입 차단
+        let msg = "평가를 시작할 수 없습니다. 잠시 후 다시 시도해 주세요.";
+        try {
+          const errData = await res.json();
+          if (errData && errData.detail) msg = errData.detail;
+        } catch (e) { /* noop */ }
+        alert(msg);
       }
     } catch (err) {
-      console.error("로그인 API 에러:", err);
-      // 오프라인 폴백 진입
-      persist({ judgeName });
-      setScreen('eval');
+      // 오프라인: 캐시된 평가자 명단으로 검증 후 진입
+      console.error("로그인 API 에러(오프라인 검증 시도):", err);
+      const cachedJudge = judges.find(j => j.name === name);
+      if (!cachedJudge) {
+        alert('오프라인 상태입니다. 등록된 평가자 명단에 없는 이름이거나 대회 데이터가 아직 캐시되지 않았습니다.');
+        return;
+      }
+      await enterEval(name, cachedJudge.id, null, false);
+    }
+  };
+
+  // 기기 등록 요청 (미승인 화면에서 기기 이름 제출)
+  const handleRegisterDevice = async () => {
+    const label = deviceLabel.trim();
+    if (!label) { alert('기기 이름을 입력해 주세요.'); return; }
+    try {
+      const dk = deviceKey || await getDeviceKey();
+      const reg = await fetch(`http://localhost:18000/api/user/groups/${groupName}/device/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceKey: dk, label })
+      });
+      const rdata = await reg.json();
+      setDeviceStatus(rdata.status);
+      await saveSession(groupName, { deviceLabel: label, deviceStatus: rdata.status });
+      if (rdata.status === 'approved') {
+        window.location.reload();
+      }
+    } catch (e) {
+      console.error('기기 등록 에러:', e);
+      alert('서버에 연결할 수 없습니다. 네트워크를 확인해 주세요.');
     }
   };
 
@@ -235,15 +412,18 @@ function App() {
     nextScores[selectedBuman] = bScores;
 
     setScores(nextScores);
-    persist({ scores: nextScores });
     setModal(null);
 
-    // 서버 실시간 동기화
+    const name = judgeName.trim();
+    // 로컬 우선 저장 (pending) — 오프라인에서도 보존
+    await saveScoreCell({ groupName, judgeName: name, judgeId, bumanKey: selectedBuman, productCode: code, itemId: String(itemKey), score: val, syncStatus: 'pending' });
+
+    // 서버 실시간 동기화 시도 → 성공 시 synced
     if (judgeId) {
       try {
-        await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
+        const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify({
             judgeId,
             productCode: code,
@@ -251,6 +431,7 @@ function App() {
             score: val
           })
         });
+        if (res.ok) await markCellSynced({ groupName, judgeName: name, bumanKey: selectedBuman, productCode: code, itemId: String(itemKey) });
       } catch (e) {
         console.error("실시간 배점 동기화 실패:", e);
       }
@@ -268,15 +449,18 @@ function App() {
     nextScores[selectedBuman] = bScores;
 
     setScores(nextScores);
-    persist({ scores: nextScores });
     setModal(null);
+
+    const name = judgeName.trim();
+    // 로컬 셀 삭제
+    await deleteScoreCell({ groupName, judgeName: name, bumanKey: selectedBuman, productCode: code, itemId: String(itemKey) });
 
     // 서버 실시간 동기화 (삭제)
     if (judgeId) {
       try {
         await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify({
             judgeId,
             productCode: code,
@@ -341,6 +525,10 @@ function App() {
     // 모든 제품의 모든 채점 항목이 기입되어 있는지 체크
     const bScores = scores[selectedBuman] || {};
     const plist = getProductList(selectedBuman);
+    if (plist.length === 0) {
+      alert('이 부문에는 등록된 평가 제품이 없습니다.');
+      return;
+    }
     const allFilled = plist.every(p => {
       const s = bScores[p.code] || {};
       return activeItems.every(it => s[it.key] !== undefined);
@@ -351,22 +539,29 @@ function App() {
       return;
     }
 
-    if (judgeId) {
-      try {
-        await fetch(`http://localhost:18000/api/user/groups/${groupName}/complete`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ judgeId, bumanPrefix: selectedBuman })
-        });
-      } catch (e) {
-        console.error("완료 제출 에러:", e);
+    // 배점완료(최종 제출)는 서버 확인이 필요 — 오프라인이면 경고 후 중단.
+    // 입력한 점수는 이미 로컬에 저장되어 있어 유실되지 않고, 연결 후 다시 제출하면 됨.
+    try {
+      await syncPending(judgeName.trim(), judgeId); // 미동기화 점수 먼저 전송
+      const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/complete`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ judgeId, bumanPrefix: selectedBuman })
+      });
+      if (!res.ok) {
+        alert("서버 제출에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+        return;
       }
+    } catch (e) {
+      console.error("완료 제출 에러:", e);
+      alert("인터넷 연결을 확인해 주세요. 입력한 점수는 로컬에 저장되어 있으니, 연결된 뒤 배점완료를 다시 눌러 주세요.");
+      return;
     }
 
     const nextCompleted = { ...completed, [selectedBuman]: true };
     setCompleted(nextCompleted);
-    persist({ completed: nextCompleted });
-    setScreen('done');
+    await saveSession(groupName, { completed: nextCompleted });
+    navTo('done');
   };
 
   // 현재 화면에 렌더링될 점수 관련 진행도 연산
@@ -380,6 +575,71 @@ function App() {
       if (s[it.key] !== undefined) filledCount++;
     });
   });
+
+  // 접근 게이트: 유효한 대회 코드로 API 검증 성공 시에만 평가 페이지 노출
+  if (access === 'checking') {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-[#eef1f6] text-[#5a6a82] text-[16px] font-semibold">
+        품평회 정보를 확인하는 중입니다...
+      </div>
+    );
+  }
+  if (access === 'denied') {
+    return (
+      <div className="w-screen h-screen flex flex-col items-center justify-center bg-[#eef1f6] text-center px-6">
+        <div className="text-[52px] font-extrabold text-[#1b2a4a] leading-none">404</div>
+        <div className="mt-4 text-[18px] font-bold text-[#2b3646]">존재하지 않는 품평회입니다.</div>
+        <div className="mt-2 text-[14px] text-[#8b97ab]">주소를 다시 확인해 주세요.</div>
+      </div>
+    );
+  }
+
+  // 기기 미승인/대기 화면
+  if (access === 'device') {
+    const msg = deviceStatus === 'pending'
+      ? '관리자 승인 대기 중입니다. 승인 후 새로고침해 주세요.'
+      : deviceStatus === 'blocked'
+      ? '차단된 기기입니다. 관리자에게 문의해 주세요.'
+      : deviceStatus === 'rejected'
+      ? '신규 기기 등록이 잠겨 있습니다. 관리자에게 문의해 주세요.'
+      : deviceStatus === 'offline'
+      ? '오프라인 상태입니다. 최초 1회는 온라인에서 기기 인증이 필요합니다.'
+      : '이 기기는 아직 인증되지 않았습니다. 기기 이름을 입력하고 등록을 요청한 뒤, 관리자 승인 후 새로고침해 주세요.';
+    const canRegister = deviceStatus !== 'blocked' && deviceStatus !== 'rejected' && deviceStatus !== 'offline';
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-[#eef1f6] px-6">
+        <div className="w-full max-w-[460px] bg-white rounded-[20px] shadow-[0_20px_60px_rgba(27,42,74,0.12)] p-[36px]">
+          <div className="text-[13px] tracking-[2px] text-[#d9b866] font-bold">DEVICE AUTH</div>
+          <h2 className="mt-[10px] text-[22px] font-extrabold text-[#1b2a4a]">기기 인증이 필요합니다</h2>
+          <p className="mt-[12px] text-[15px] text-[#5a6a82] leading-[1.6]">{msg}</p>
+          {canRegister && (
+            <div className="mt-[24px]">
+              <label className="block text-[13px] font-bold text-[#5a6a82]">기기 이름</label>
+              <input
+                type="text"
+                value={deviceLabel}
+                onChange={(e) => setDeviceLabel(e.target.value)}
+                placeholder="예) 심사장 태블릿 1번"
+                className="mt-[8px] w-full h-[50px] border-[1.5px] border-[#cbd3e1] rounded-[12px] px-[16px] text-[16px] font-semibold text-[#1b2a4a] bg-white focus:outline-none focus:border-[#1b2a4a]"
+              />
+              <button
+                onClick={handleRegisterDevice}
+                className="mt-[16px] w-full h-[52px] rounded-[12px] bg-[#1b2a4a] text-white text-[16px] font-extrabold hover:bg-[#243a63] transition-all"
+              >
+                기기 등록 요청
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-[12px] w-full h-[48px] rounded-[12px] border border-[#cbd3e1] bg-white text-[#5a6a82] text-[15px] font-bold hover:bg-gray-50 transition-all"
+          >
+            새로고침
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-screen h-screen overflow-hidden bg-[#eef1f6] text-[#2b3646] flex flex-col select-none">
@@ -397,7 +657,7 @@ function App() {
                 전문가 품평회<br />평가 시스템
               </h1>
               <p className="text-[17px] text-bannerText mt-[20px] leading-[1.7]">
-                2026 우리쌀·우리술<br />K-라이스페스타 품평회
+                {systemName}
               </p>
             </div>
             <div className="text-[14px] text-bannerSub leading-[1.8]">
@@ -438,49 +698,37 @@ function App() {
                     담당 부문 선택
                   </div>
 
-                  {/* 쌀가공식품 */}
-                  <div className="text-[12px] font-extrabold text-brandGreen mt-[14px] tracking-[1px] leading-none">
-                    쌀가공식품 · 오픈테스트
-                  </div>
-                  <div className="grid grid-cols-3 gap-[10px] mt-[8px]">
-                    {BUMANS.filter(x => x.cat === 'ricefood').map((item) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => setSelectedBuman(item.key)}
-                        className={`h-[84px] w-full px-[8px] rounded-[12px] flex flex-col items-center justify-center text-center border-2 transition-all cursor-pointer ${
-                          selectedBuman === item.key
-                            ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
-                            : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
-                        }`}
-                      >
-                        <div className="text-[22px] font-extrabold leading-none">{item.prefix}</div>
-                        <div className="text-[14px] font-semibold mt-[4px] leading-none">{item.name}</div>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* 우리술 */}
-                  <div className="text-[12px] font-extrabold text-brandBlue mt-[18px] tracking-[1px] leading-none">
-                    우리술 · 블라인드
-                  </div>
-                  <div className="grid grid-cols-4 gap-[10px] mt-[8px]">
-                    {BUMANS.filter(x => x.cat === 'woolisul').map((item) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => setSelectedBuman(item.key)}
-                        className={`h-[84px] w-full px-[8px] rounded-[12px] flex flex-col items-center justify-center text-center border-2 transition-all cursor-pointer ${
-                          selectedBuman === item.key
-                            ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
-                            : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
-                        }`}
-                      >
-                        <div className="text-[22px] font-extrabold leading-none">{item.prefix}</div>
-                        <div className="text-[13px] font-semibold mt-[4px] leading-none">{item.name}</div>
-                      </button>
-                    ))}
-                  </div>
+                  {/* 관리자에 등록된 부문 그룹(group) 기준으로 동적 렌더링 */}
+                  {[...new Set(bumans.map(b => b.group || '기타'))].map((groupName, gIdx) => {
+                    const groupBumans = bumans.filter(b => (b.group || '기타') === groupName);
+                    const test = groupBumans[0]?.test || '';
+                    const isBlind = test === '블라인드';
+                    const cols = groupBumans.length >= 4 ? 'grid-cols-4' : 'grid-cols-3';
+                    return (
+                      <React.Fragment key={groupName}>
+                        <div className={`text-[12px] font-extrabold ${isBlind ? 'text-brandBlue' : 'text-brandGreen'} ${gIdx === 0 ? 'mt-[14px]' : 'mt-[18px]'} tracking-[1px] leading-none`}>
+                          {groupName} · {test}
+                        </div>
+                        <div className={`grid ${cols} gap-[10px] mt-[8px]`}>
+                          {groupBumans.map((item) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              onClick={() => setSelectedBuman(item.key)}
+                              className={`h-[84px] w-full px-[8px] rounded-[12px] flex flex-col items-center justify-center text-center border-2 transition-all cursor-pointer ${
+                                selectedBuman === item.key
+                                  ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
+                                  : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
+                              }`}
+                            >
+                              <div className="text-[22px] font-extrabold leading-none">{item.prefix}</div>
+                              <div className="text-[13px] font-semibold mt-[4px] leading-none">{item.name}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
 
                 {/* 시작 버튼 */}
@@ -508,17 +756,17 @@ function App() {
           {/* 상단 네비게이션 헤더 */}
           <div className="bg-[#1b2a4a] color-white text-white padding-x-[22px] px-[22px] py-[12px] flex items-center gap-[18px] shrink-0">
             <button
-              onClick={() => setScreen('start')}
+              onClick={() => window.history.back()}
               className="bg-transparent border border-[#45577f] text-[#c6d2ea] rounded-[9px] h-[40px] px-[14px] font-semibold cursor-pointer text-[14px] hover:bg-[#243a63] transition-all"
             >
               ← 부문
             </button>
             <div className="min-w-0">
               <div className="text-[16px] font-extrabold truncate">
-                2026 우리쌀·우리술 K-라이스페스타 품평회
+                {systemName}
               </div>
               <div className="text-[12px] text-textBlue mt-[2px] truncate">
-                {cat.label} · {buman.name} ({buman.prefix}) · {buman.test}
+                {(buman.group || cat.label)} · {buman.name} ({buman.prefix}) · {buman.test}
               </div>
             </div>
             
@@ -532,7 +780,7 @@ function App() {
                 value={judgeName}
                 onChange={(e) => {
                   setJudgeName(e.target.value);
-                  persist({ judgeName: e.target.value });
+                  saveSession(groupName, { judgeName: e.target.value });
                 }}
                 placeholder="성명 입력"
                 className="w-[130px] h-[34px] border-none rounded-[7px] px-[12px] text-[15px] font-bold text-primary bg-white focus:outline-none"
@@ -557,7 +805,7 @@ function App() {
             <button
               onClick={handleComplete}
               className={`rounded-[10px] h-[42px] px-[18px] text-[14px] font-extrabold transition-all shrink-0 ${
-                filledCount === totalCount
+                totalCount > 0 && filledCount === totalCount
                   ? 'bg-[#e03b3b] border border-[#e03b3b] text-white cursor-pointer hover:bg-accent-red-hover'
                   : 'bg-[#243a63] border border-[#3a4f78] text-[#5e77a6] cursor-default'
               }`}
@@ -571,14 +819,13 @@ function App() {
             <span className="text-[12px] font-bold text-[#8b97ab] mr-[4px] whitespace-nowrap leading-none">
               부문 전환
             </span>
-            {BUMANS.map((b) => {
+            {bumans.map((b) => {
               const active = b.key === selectedBuman;
-              // 해당 부문의 완료 여부 체크
+              // 해당 부문의 완료 여부 체크 (관리자 등록 템플릿 항목 기준)
               const bList = getProductList(b.key);
-              const bCat = ITEMS[b.cat];
-              const bItems = [...bCat.gwan, ...bCat.sang];
+              const bItems = buildActiveItems(b.key);
               const bScores = scores[b.key] || {};
-              const done = bList.every(p => {
+              const done = bList.length > 0 && bList.every(p => {
                 const s = bScores[p.code] || {};
                 return bItems.every(it => s[it.key] !== undefined);
               });
@@ -605,6 +852,12 @@ function App() {
 
           {/* 테이블 컨테이너 */}
           <div className="flex-1 overflow-auto py-[18px] px-[22px] pb-[40px]">
+            {products.length === 0 ? (
+              <div className="w-full border border-[#cbd3e1] rounded-[10px] bg-white py-[60px] px-[24px] text-center">
+                <div className="text-[16px] font-bold text-[#5a6a82]">등록된 평가 제품이 없습니다.</div>
+                <div className="mt-[8px] text-[13px] text-[#8b97ab]">관리자에서 이 부문에 제품을 등록하면 평가표가 표시됩니다.</div>
+              </div>
+            ) : (
             <div className="overflow-x-auto w-full border border-[#cbd3e1] rounded-[10px] bg-white">
               <table className="border-collapse border-spacing-0 text-[13px] min-w-[900px] w-full bg-white overflow-hidden">
                 <thead>
@@ -660,7 +913,7 @@ function App() {
                     )}
                     
                     <th rowSpan={3} className="sticky top-0 z-10 bg-[#1b2a4a] text-white border-b-2 border-[#243a63] p-[8px] w-[88px] font-extrabold text-center">
-                      소계<br />(120)
+                      소계<br />({subtotalMax})
                     </th>
                   </tr>
 
@@ -883,6 +1136,7 @@ function App() {
                 </tbody>
               </table>
             </div>
+            )}
             
             {/* 테이블 안내 주석 */}
             <div className="mt-[12px] text-[12px] text-[#8b97ab] leading-[1.7]">
@@ -927,20 +1181,17 @@ function App() {
                 </div>
                 <div className="flex-1 min-w-[150px] bg-[#f4f6fa] rounded-[12px] p-[16px] px-[18px]">
                   <div className="text-[12px] text-[#8b97ab] font-semibold">평가 제품</div>
-                  <div className="mt-[4px] text-[18px] font-extrabold text-primary leading-none">{COUNT}개</div>
+                  <div className="mt-[4px] text-[18px] font-extrabold text-primary leading-none">{products.length}개</div>
                 </div>
               </div>
 
               <div className="mt-[24px] text-[14px] font-extrabold text-textSub">
-                제품별 소계 (120점 만점)
+                제품별 소계 ({subtotalMax}점 만점)
               </div>
               <div className="mt-[10px] border border-[#e5e9f0] rounded-[12px] overflow-hidden bg-white">
                 {products.map((p, idx) => {
                   const pScores = bScores[p.code] || {};
-                  const gwanSum = cat.gwan.reduce((sum, it) => sum + (pScores[it.key] || 0), 0);
-                  const sangSum = cat.sang.reduce((sum, it) => sum + (pScores[it.key] || 0), 0);
-                  const cv = Math.round(gwanSum * 0.7 * 10) / 10;
-                  const subtotal = cat.convert ? Math.round((cv + sangSum) * 10) / 10 : gwanSum;
+                  const subtotal = calcSubtotal(pScores, selectedBuman);
 
                   return (
                     <div
@@ -962,15 +1213,13 @@ function App() {
 
               <div className="mt-[28px] display-flex flex gap-[12px]">
                 <button
-                  onClick={() => setScreen('eval')}
+                  onClick={() => window.history.back()}
                   className="flex-1 h-[54px] rounded-[12px] border border-[#cbd3e1] bg-white text-textSub text-[16px] font-bold cursor-pointer hover:bg-gray-50 transition-all"
                 >
                   ← 수정하기
                 </button>
                 <button
-                  onClick={() => {
-                    setScreen('start');
-                  }}
+                  onClick={() => navTo('start')}
                   className="flex-1 h-[54px] rounded-[12px] bg-primary text-white text-[16px] font-extrabold cursor-pointer hover:bg-secondary transition-all"
                 >
                   다른 부문 평가 →
