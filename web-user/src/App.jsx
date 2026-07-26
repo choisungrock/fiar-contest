@@ -79,6 +79,13 @@ function App() {
   const [deviceStatus, setDeviceStatus] = useState('checking'); // checking|pending|approved|blocked|rejected|offline
   const [deviceLabel, setDeviceLabel] = useState('');
 
+  // 브라우저 탭 타이틀을 대그룹 명칭으로 동적 갱신
+  useEffect(() => {
+    if (systemName) {
+      document.title = systemName;
+    }
+  }, [systemName]);
+
   // 마운트 시 로컬 세션(평가자/완료 상태) 복구
   useEffect(() => {
     if (!groupName) return;

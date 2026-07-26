@@ -171,6 +171,7 @@ function App() {
   const [actualScores, setActualScores] = useState({});
 
   useEffect(() => {
+    document.title = "품평회 관리자";
     try {
       const remember = localStorage.getItem('kricefesta_admin_remember');
       const session = sessionStorage.getItem('kricefesta_admin_session');
