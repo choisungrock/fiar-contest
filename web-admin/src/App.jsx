@@ -1722,13 +1722,29 @@ function App() {
                   <input
                     type="text"
                     readOnly
-                    value={`${window.location.protocol}//${window.location.hostname}:18002/${systemCode}`}
+                    value={(() => {
+                      const proto = window.location.protocol;
+                      const host = window.location.hostname;
+                      if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.') || host.startsWith('10.')) {
+                        return `${proto}//${host}:18002/${systemCode}`;
+                      }
+                      const domain = host.startsWith('admin.') ? host.substring(6) : host;
+                      return `${proto}//${domain}/${systemCode}`;
+                    })()}
                     className="flex-grow h-[46px] border-[1.5px] border-[#cbd3e1] rounded-[10px] px-[14px] text-[14px] font-semibold text-[#5a6a82] bg-[#f8fafc] focus:outline-none"
                     onClick={(e) => e.target.select()}
                   />
                   <button
                     onClick={() => {
-                      const url = `${window.location.protocol}//${window.location.hostname}:18002/${systemCode}`;
+                      const proto = window.location.protocol;
+                      const host = window.location.hostname;
+                      let url = "";
+                      if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.') || host.startsWith('10.')) {
+                        url = `${proto}//${host}:18002/${systemCode}`;
+                      } else {
+                        const domain = host.startsWith('admin.') ? host.substring(6) : host;
+                        url = `${proto}//${domain}/${systemCode}`;
+                      }
                       navigator.clipboard.writeText(url)
                         .then(() => alert('심사 URL이 클립보드에 복사되었습니다.'))
                         .catch(() => alert('URL 복사에 실패했습니다. 주소를 직접 드래그해서 복사해 주세요.'));
