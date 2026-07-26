@@ -66,6 +66,24 @@ from sqlalchemy import create_engine, text
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://fair_user:fair_password@db:3306/fair_db?charset=utf8mb4")
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
+def is_authorized_admin(username: str) -> bool:
+    if not username:
+        return False
+    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
+    if username == env_master:
+        return True
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT fa_group_ids FROM fair_admin WHERE fa_username = :username"),
+                {"username": username}
+            ).first()
+            if row and row[0] == "*":
+                return True
+    except Exception:
+        pass
+    return False
+
 # 9. 관리자 계정 테이블 자동 생성
 try:
     with engine.connect() as _conn:
@@ -680,10 +698,9 @@ class UpdateAdminRequest(BaseModel):
 
 @router.get("/admins")
 def list_admins(x_admin_username: Optional[str] = Header(None)):
-    """등록된 모든 서브 관리자 목록 조회 (마스터만 허용)"""
-    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
-    if x_admin_username != env_master:
-        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 관리자만 접근 가능합니다.")
+    """등록된 모든 서브 관리자 목록 조회 (마스터 또는 전체 권한 관리자 허용)"""
+    if not is_authorized_admin(x_admin_username):
+        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 또는 전체 권한 관리자만 접근 가능합니다.")
     try:
         with engine.connect() as conn:
             rows = conn.execute(text("SELECT fa_id, fa_username, fa_password, fa_name, fa_group_ids, fa_created_at FROM fair_admin ORDER BY fa_id ASC"))
@@ -703,10 +720,9 @@ def list_admins(x_admin_username: Optional[str] = Header(None)):
 
 @router.post("/admins")
 def create_admin(req: CreateAdminRequest, x_admin_username: Optional[str] = Header(None)):
-    """신규 관리자 추가 (마스터만 허용)"""
-    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
-    if x_admin_username != env_master:
-        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 관리자만 접근 가능합니다.")
+    """신규 관리자 추가 (마스터 또는 전체 권한 관리자 허용)"""
+    if not is_authorized_admin(x_admin_username):
+        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 또는 전체 권한 관리자만 접근 가능합니다.")
     try:
         with engine.connect() as conn:
             with conn.begin():
@@ -727,10 +743,9 @@ def create_admin(req: CreateAdminRequest, x_admin_username: Optional[str] = Head
 
 @router.put("/admins/{fa_id}")
 def update_admin(fa_id: int, req: UpdateAdminRequest, x_admin_username: Optional[str] = Header(None)):
-    """관리자 정보 수정 (마스터만 허용)"""
-    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
-    if x_admin_username != env_master:
-        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 관리자만 접근 가능합니다.")
+    """관리자 정보 수정 (마스터 또는 전체 권한 관리자 허용)"""
+    if not is_authorized_admin(x_admin_username):
+        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 또는 전체 권한 관리자만 접근 가능합니다.")
     try:
         with engine.connect() as conn:
             with conn.begin():
@@ -766,10 +781,9 @@ def update_admin(fa_id: int, req: UpdateAdminRequest, x_admin_username: Optional
 
 @router.delete("/admins/{fa_id}")
 def delete_admin(fa_id: int, x_admin_username: Optional[str] = Header(None)):
-    """관리자 삭제 (마스터만 허용)"""
-    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
-    if x_admin_username != env_master:
-        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 관리자만 접근 가능합니다.")
+    """관리자 삭제 (마스터 또는 전체 권한 관리자 허용)"""
+    if not is_authorized_admin(x_admin_username):
+        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 또는 전체 권한 관리자만 접근 가능합니다.")
     try:
         with engine.connect() as conn:
             with conn.begin():

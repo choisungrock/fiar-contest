@@ -1156,7 +1156,7 @@ function App() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {(!adminUser || adminUser.isMaster) && (
+            {(!adminUser || adminUser.isMaster || adminUser.groupIds === '*') && (
               <button
                 onClick={() => setView('admin-management')}
                 style={{
