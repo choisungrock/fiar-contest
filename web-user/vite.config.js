@@ -32,4 +32,7 @@ export default defineConfig({
       }
     })
   ],
+  server: {
+    allowedHosts: ['.ricecontest.com', 'localhost', '127.0.0.1']
+  }
 })
