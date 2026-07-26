@@ -92,6 +92,16 @@ CREATE TABLE IF NOT EXISTS fair_device (
   UNIQUE KEY uq_device (fd_fg_id, fd_device_key)
 ) ENGINE=InnoDB;
 
+-- 9. 관리자 계정 테이블
+CREATE TABLE IF NOT EXISTS fair_admin (
+  fa_id INT AUTO_INCREMENT PRIMARY KEY,
+  fa_username VARCHAR(100) NOT NULL UNIQUE,
+  fa_password VARCHAR(255) NOT NULL,
+  fa_name VARCHAR(100) NOT NULL,
+  fa_group_ids VARCHAR(255) NOT NULL DEFAULT '*',
+  fa_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
 -- ==================== 초기 테스트 데이터 적재 ====================
 
 -- 1. 대그룹

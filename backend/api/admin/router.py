@@ -1,11 +1,16 @@
 # 관리자 기능 관련 API 요청을 처리하는 APIRouter 정의 파일
 import os
 import secrets
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Header
 from typing import Union, Optional
 from pydantic import BaseModel
 
+import hashlib
+
 router = APIRouter()
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 class LoginRequest(BaseModel):
     username: str
@@ -24,9 +29,33 @@ def admin_login(req: LoginRequest):
         return {
             "status": "success",
             "message": "로그인 인증에 성공하였습니다.",
-            "token": "mock-admin-token-kricefesta-7788"
+            "token": "mock-admin-token-kricefesta-7788",
+            "username": env_master,
+            "name": "마스터 관리자",
+            "isMaster": True,
+            "groupIds": "*"
         }
     else:
+        # DB에서 서브 관리자 조회
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT fa_id, fa_password, fa_name, fa_group_ids FROM fair_admin WHERE fa_username = :username"),
+                    {"username": req.username}
+                ).first()
+                if row and row[1] == hash_password(req.password):
+                    return {
+                        "status": "success",
+                        "message": "로그인 인증에 성공하였습니다.",
+                        "token": f"mock-admin-token-sub-{row[0]}",
+                        "username": req.username,
+                        "name": row[2],
+                        "isMaster": False,
+                        "groupIds": row[3]
+                    }
+        except Exception as e:
+            print(f"DB 로그인 검증 중 오류: {e}")
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="이메일(아이디) 또는 비밀번호가 올바르지 않습니다."
@@ -37,6 +66,28 @@ from sqlalchemy import create_engine, text
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://fair_user:fair_password@db:3306/fair_db?charset=utf8mb4")
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
+# 9. 관리자 계정 테이블 자동 생성
+try:
+    with engine.connect() as _conn:
+        _trans = _conn.begin()
+        try:
+            _conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS fair_admin (
+                  fa_id INT AUTO_INCREMENT PRIMARY KEY,
+                  fa_username VARCHAR(100) NOT NULL UNIQUE,
+                  fa_password VARCHAR(255) NOT NULL,
+                  fa_name VARCHAR(100) NOT NULL,
+                  fa_group_ids VARCHAR(255) NOT NULL DEFAULT '*',
+                  fa_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB;
+            """))
+            _trans.commit()
+        except Exception as _inner:
+            _trans.rollback()
+            print(f"Error creating fair_admin table: {_inner}")
+except Exception as _e:
+    print(f"Database connection error on startup: {_e}")
+
 class CreateGroupRequest(BaseModel):
     name: str
     period: str
@@ -44,15 +95,38 @@ class CreateGroupRequest(BaseModel):
     code: str
 
 @router.get("/groups")
-def get_groups():
+def get_groups(x_admin_username: Optional[str] = Header(None)):
     """등록된 대그룹(품평회 대회) 목록 조회 API"""
     try:
+        env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
+        allowed_ids = None
+        
+        # 서브 관리자 권한 필터링 확인
+        if x_admin_username and x_admin_username != env_master:
+            try:
+                with engine.connect() as conn:
+                    grp_ids_str = conn.execute(
+                        text("SELECT fa_group_ids FROM fair_admin WHERE fa_username = :username"),
+                        {"username": x_admin_username}
+                    ).scalar()
+                    if grp_ids_str and grp_ids_str != '*':
+                        allowed_ids = [int(x.strip()) for x in grp_ids_str.split(',') if x.strip().isdigit()]
+                    elif not grp_ids_str:
+                        allowed_ids = []
+            except Exception as e:
+                print(f"서브 관리자 권한 조회 중 오류: {e}")
+
         with engine.connect() as conn:
             res_groups = conn.execute(text("SELECT fg_id, fg_name, fg_period, fg_status, fg_code FROM fair_group ORDER BY fg_id ASC"))
             groups_list = []
             
             for row in res_groups:
                 g_id = row[0]
+                
+                # 권한 범위가 아닌 대그룹은 목록에서 배제
+                if allowed_ids is not None and g_id not in allowed_ids:
+                    continue
+
                 g_name = row[1]
                 g_period = row[2]
                 g_status = row[3]
@@ -204,9 +278,30 @@ class SaveDetailsRequest(BaseModel):
     templates: list[EvaluationTemplateItem]
 
 @router.get("/groups/{fg_id}/details")
-def get_group_details(fg_id: int):
+def get_group_details(fg_id: int, x_admin_username: Optional[str] = Header(None)):
     """대그룹(품평회 대회) 상세 리소스 일괄 조회 API"""
     try:
+        env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
+        
+        # 서브 관리자 권한 상세 검증
+        if x_admin_username and x_admin_username != env_master:
+            try:
+                with engine.connect() as conn:
+                    grp_ids_str = conn.execute(
+                        text("SELECT fa_group_ids FROM fair_admin WHERE fa_username = :username"),
+                        {"username": x_admin_username}
+                    ).scalar()
+                    if grp_ids_str and grp_ids_str != '*':
+                        allowed_ids = [int(x.strip()) for x in grp_ids_str.split(',') if x.strip().isdigit()]
+                        if fg_id not in allowed_ids:
+                            raise HTTPException(status_code=403, detail="해당 대그룹에 대한 관리 권한이 없습니다.")
+                    elif not grp_ids_str:
+                        raise HTTPException(status_code=403, detail="해당 대그룹에 대한 관리 권한이 없습니다.")
+            except HTTPException:
+                raise
+            except Exception as e:
+                print(f"상세 조회 권한 필터링 실패: {e}")
+
         with engine.connect() as conn:
             g_row = conn.execute(
                 text("SELECT fg_name, fg_period, fg_status, fg_code FROM fair_group WHERE fg_id = :fg_id"),
@@ -335,9 +430,30 @@ def get_group_details(fg_id: int):
         raise HTTPException(status_code=500, detail=f"상세 정보 조회 중 오류 발생: {str(e)}")
 
 @router.post("/groups/{fg_id}/save")
-def save_group_details(fg_id: int, req: SaveDetailsRequest):
+def save_group_details(fg_id: int, req: SaveDetailsRequest, x_admin_username: Optional[str] = Header(None)):
     """대그룹(품평회 대회) 상세 리소스 일괄 저장 API"""
     try:
+        env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
+        
+        # 서브 관리자 권한 수정 검증
+        if x_admin_username and x_admin_username != env_master:
+            try:
+                with engine.connect() as conn:
+                    grp_ids_str = conn.execute(
+                        text("SELECT fa_group_ids FROM fair_admin WHERE fa_username = :username"),
+                        {"username": x_admin_username}
+                    ).scalar()
+                    if grp_ids_str and grp_ids_str != '*':
+                        allowed_ids = [int(x.strip()) for x in grp_ids_str.split(',') if x.strip().isdigit()]
+                        if fg_id not in allowed_ids:
+                            raise HTTPException(status_code=403, detail="해당 대그룹에 대한 수정 권한이 없습니다.")
+                    elif not grp_ids_str:
+                        raise HTTPException(status_code=403, detail="해당 대그룹에 대한 수정 권한이 없습니다.")
+            except HTTPException:
+                raise
+            except Exception as e:
+                print(f"상세 저장 권한 필터링 실패: {e}")
+
         with engine.connect() as conn:
             trans = conn.begin()
             try:
@@ -547,3 +663,124 @@ def get_group_results(fg_id: int):
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"결과 데이터 집계 중 오류 발생: {str(e)}")
+
+
+# ==================== 관리자 계정 관리 (CRUD) ====================
+class CreateAdminRequest(BaseModel):
+    username: str
+    password: str
+    name: str
+    groupIds: str # '*' 이면 전체, 혹은 '1,3' 형태의 대그룹 ID 목록
+
+class UpdateAdminRequest(BaseModel):
+    username: str
+    password: str
+    name: str
+    groupIds: str
+
+@router.get("/admins")
+def list_admins(x_admin_username: Optional[str] = Header(None)):
+    """등록된 모든 서브 관리자 목록 조회 (마스터만 허용)"""
+    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
+    if x_admin_username != env_master:
+        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 관리자만 접근 가능합니다.")
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text("SELECT fa_id, fa_username, fa_password, fa_name, fa_group_ids, fa_created_at FROM fair_admin ORDER BY fa_id ASC"))
+            admins_list = []
+            for r in rows:
+                admins_list.append({
+                    "id": r[0],
+                    "username": r[1],
+                    "password": r[2],
+                    "name": r[3],
+                    "groupIds": r[4],
+                    "createdAt": str(r[5]) if r[5] else ""
+                })
+            return {"status": "success", "admins": admins_list}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"관리자 목록 조회 중 오류 발생: {str(e)}")
+
+@router.post("/admins")
+def create_admin(req: CreateAdminRequest, x_admin_username: Optional[str] = Header(None)):
+    """신규 관리자 추가 (마스터만 허용)"""
+    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
+    if x_admin_username != env_master:
+        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 관리자만 접근 가능합니다.")
+    try:
+        with engine.connect() as conn:
+            with conn.begin():
+                # ID 중복 체크
+                exist = conn.execute(text("SELECT fa_id FROM fair_admin WHERE fa_username = :username"), {"username": req.username}).first()
+                if exist or req.username == env_master:
+                    raise HTTPException(status_code=400, detail="이미 존재하는 관리자 ID입니다.")
+                
+                conn.execute(
+                    text("INSERT INTO fair_admin (fa_username, fa_password, fa_name, fa_group_ids) VALUES (:username, :password, :name, :group_ids)"),
+                    {"username": req.username, "password": hash_password(req.password), "name": req.name, "group_ids": req.groupIds}
+                )
+            return {"status": "success", "message": "새 관리자가 성공적으로 추가되었습니다."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"관리자 추가 중 오류 발생: {str(e)}")
+
+@router.put("/admins/{fa_id}")
+def update_admin(fa_id: int, req: UpdateAdminRequest, x_admin_username: Optional[str] = Header(None)):
+    """관리자 정보 수정 (마스터만 허용)"""
+    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
+    if x_admin_username != env_master:
+        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 관리자만 접근 가능합니다.")
+    try:
+        with engine.connect() as conn:
+            with conn.begin():
+                # 관리자 존재 여부 확인
+                exist = conn.execute(text("SELECT fa_id FROM fair_admin WHERE fa_id = :id"), {"id": fa_id}).first()
+                if not exist:
+                    raise HTTPException(status_code=404, detail="해당 관리자를 찾을 수 없습니다.")
+                
+                # ID 중복 체크 (자신 제외)
+                dup = conn.execute(
+                    text("SELECT fa_id FROM fair_admin WHERE fa_username = :username AND fa_id != :id"),
+                    {"username": req.username, "id": fa_id}
+                ).first()
+                if dup or req.username == env_master:
+                    raise HTTPException(status_code=400, detail="이미 존재하는 관리자 ID입니다.")
+                
+                # 패스워드 미지정 시 기존 비밀번호 유지
+                if req.password == "__KEEP_PASSWORD__" or not req.password:
+                    conn.execute(
+                        text("UPDATE fair_admin SET fa_username = :username, fa_name = :name, fa_group_ids = :group_ids WHERE fa_id = :id"),
+                        {"username": req.username, "name": req.name, "group_ids": req.groupIds, "id": fa_id}
+                    )
+                else:
+                    conn.execute(
+                        text("UPDATE fair_admin SET fa_username = :username, fa_password = :password, fa_name = :name, fa_group_ids = :group_ids WHERE fa_id = :id"),
+                        {"username": req.username, "password": hash_password(req.password), "name": req.name, "group_ids": req.groupIds, "id": fa_id}
+                    )
+            return {"status": "success", "message": "관리자 정보가 성공적으로 수정되었습니다."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"관리자 수정 중 오류 발생: {str(e)}")
+
+@router.delete("/admins/{fa_id}")
+def delete_admin(fa_id: int, x_admin_username: Optional[str] = Header(None)):
+    """관리자 삭제 (마스터만 허용)"""
+    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
+    if x_admin_username != env_master:
+        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 관리자만 접근 가능합니다.")
+    try:
+        with engine.connect() as conn:
+            with conn.begin():
+                exist = conn.execute(text("SELECT fa_id FROM fair_admin WHERE fa_id = :id"), {"id": fa_id}).first()
+                if not exist:
+                    raise HTTPException(status_code=404, detail="해당 관리자를 찾을 수 없습니다.")
+                
+                conn.execute(text("DELETE FROM fair_admin WHERE fa_id = :id"), {"id": fa_id})
+            return {"status": "success", "message": "관리자 계정이 정상적으로 삭제되었습니다."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"관리자 삭제 중 오류 발생: {str(e)}")
+

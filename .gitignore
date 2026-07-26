@@ -11,10 +11,12 @@ dist/
 build/
 .cache/
 .env
+.env.example
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
 
 # 파이썬 가상환경 및 캐시 (차후 추가 대비)
 __pycache__/

@@ -2,6 +2,36 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
+// API Base URL & Secret Header 자동 인젝션용 fetch 랩핑
+const originalFetch = window.fetch;
+window.fetch = async (input, init) => {
+  let url = typeof input === 'string' ? input : input.url;
+  
+  const backendBase = "http://localhost:18000/api";
+  const configuredBase = (import.meta.env.VITE_API_URL || backendBase).replace(/\/$/, "");
+  
+  if (url.startsWith(backendBase)) {
+    url = url.replace(backendBase, configuredBase);
+  } else if (url.startsWith("/api")) {
+    url = configuredBase + url.substring(4);
+  }
+  
+  const newInit = { ...init };
+  newInit.headers = { ...newInit.headers };
+  
+  const apiSecret = import.meta.env.VITE_ADMIN_API_SECRET;
+  if (apiSecret) {
+    newInit.headers["X-Admin-Api-Secret"] = apiSecret;
+  }
+  
+  if (typeof input === 'string') {
+    return originalFetch(url, newInit);
+  } else {
+    const newRequest = new Request(url, input);
+    return originalFetch(newRequest, newInit);
+  }
+};
+
 // 공통 네비게이션 명세
 const NAV = [
   { key: 'overview', icon: '▤', label: '시스템 개요' },
@@ -52,16 +82,36 @@ function App() {
       return false;
     }
   });
+  const [adminUser, setAdminUser] = useState(() => {
+    try {
+      const user = localStorage.getItem('kricefesta_admin_user') || sessionStorage.getItem('kricefesta_admin_user');
+      return user ? JSON.parse(user) : null;
+    } catch (e) {
+      return null;
+    }
+  });
 
   // 2) 관리자 대시보드 및 상세 제어 상태
   const [view, setView] = useState(() => {
     try {
       const path = window.location.pathname;
-      return path.startsWith('/console') ? 'console' : 'dashboard';
+      if (path.startsWith('/console')) return 'console';
+      if (path.startsWith('/admin-management')) return 'admin-management';
+      return 'dashboard';
     } catch (e) {
       return 'dashboard';
     }
-  }); // dashboard | console
+  }); // dashboard | console | admin-management
+
+  // 관리자 관리 전용 상태
+  const [admins, setAdmins] = useState([]);
+  const [showAdminForm, setShowAdminForm] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState(null);
+  const [adminUsername, setAdminUsername] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminName, setAdminName] = useState('');
+  const [adminGroupIds, setAdminGroupIds] = useState([]);
+  const [adminIsAllGroups, setAdminIsAllGroups] = useState(true);
   const [groups, setGroups] = useState([]);
   const [activeGroup, setActiveGroup] = useState(() => {
     try {
@@ -122,11 +172,14 @@ function App() {
 
   useEffect(() => {
     try {
-
       const remember = localStorage.getItem('kricefesta_admin_remember');
       const session = sessionStorage.getItem('kricefesta_admin_session');
       if (remember === 'true' || session === 'true') {
         setIsAuthed(true);
+        const user = localStorage.getItem('kricefesta_admin_user') || sessionStorage.getItem('kricefesta_admin_user');
+        if (user) {
+          setAdminUser(JSON.parse(user));
+        }
       }
     } catch (e) {
       console.error('LocalStorage 복구 에러:', e);
@@ -136,7 +189,15 @@ function App() {
   // 실제 대그룹 목록 API Fetch 연동 함수
   const fetchGroups = async () => {
     try {
-      const response = await fetch("http://localhost:18000/api/admin/groups");
+      const headers = {};
+      const cachedUser = localStorage.getItem('kricefesta_admin_user') || sessionStorage.getItem('kricefesta_admin_user');
+      if (cachedUser) {
+        const parsed = JSON.parse(cachedUser);
+        if (parsed && parsed.username) {
+          headers["X-Admin-Username"] = parsed.username;
+        }
+      }
+      const response = await fetch("http://localhost:18000/api/admin/groups", { headers });
       if (response.ok) {
         const data = await response.json();
         if (data.status === "success" && data.groups) {
@@ -211,6 +272,8 @@ function App() {
     let url = "/";
     if (view === 'console') {
       url = `/console?groupId=${activeGroup}&section=${section}`;
+    } else if (view === 'admin-management') {
+      url = "/admin-management";
     }
     const currentUrl = window.location.pathname + window.location.search;
     if (currentUrl !== url) {
@@ -230,6 +293,8 @@ function App() {
           setActiveGroup(parseInt(gid, 10));
         }
         setSection(params.get('section') || 'overview');
+      } else if (path.startsWith('/admin-management')) {
+        setView('admin-management');
       } else {
         setView('dashboard');
       }
@@ -242,7 +307,20 @@ function App() {
   const fetchGroupDetails = async (groupId) => {
     console.log("[fetchGroupDetails] API 요청 시작, activeGroup:", groupId);
     try {
-      const response = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/details`);
+      const headers = {};
+      const cachedUser = localStorage.getItem('kricefesta_admin_user') || sessionStorage.getItem('kricefesta_admin_user');
+      if (cachedUser) {
+        const parsed = JSON.parse(cachedUser);
+        if (parsed && parsed.username) {
+          headers["X-Admin-Username"] = parsed.username;
+        }
+      }
+      const response = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/details`, { headers });
+      if (response.status === 403) {
+        alert("해당 대그룹에 대한 관리 권한이 없습니다.");
+        setView('dashboard');
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
         console.log("[fetchGroupDetails] API 응답 수신 성공:", data);
@@ -324,7 +402,15 @@ function App() {
   // 특정 품평회 결과 일괄 집계 로딩 API 연동 함수
   const fetchResults = async (groupId) => {
     try {
-      const response = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/results?_=${Date.now()}`);
+      const headers = {};
+      const cachedUser = localStorage.getItem('kricefesta_admin_user') || sessionStorage.getItem('kricefesta_admin_user');
+      if (cachedUser) {
+        const parsed = JSON.parse(cachedUser);
+        if (parsed && parsed.username) {
+          headers["X-Admin-Username"] = parsed.username;
+        }
+      }
+      const response = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/results?_=${Date.now()}`, { headers });
       if (response.ok) {
         const data = await response.json();
         if (data.status === "success") {
@@ -361,6 +447,7 @@ function App() {
   // 브라우저 새로고침 및 탭 닫기 이탈 가드
   useEffect(() => {
     const handleBeforeUnload = (e) => {
+      if (view !== 'console') return;
       const current = JSON.stringify({ systemName, systemCode, startDate, endDate, judges, bumans, products, templates });
       const backup = JSON.stringify(dbBackup);
       if (current !== backup) {
@@ -371,7 +458,7 @@ function App() {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [systemName, systemCode, startDate, endDate, judges, bumans, products, templates, dbBackup]);
+  }, [view, systemName, systemCode, startDate, endDate, judges, bumans, products, templates, dbBackup]);
 
   // groups 목록이 갱신되거나 activeGroup이 바뀔 때, 해당 대회의 이름으로 systemName 동적 복원 보정
   useEffect(() => {
@@ -427,9 +514,19 @@ function App() {
       const data = await response.json();
       console.log("로그인 성공:", data);
 
-      sessionStorage.setItem('kricefesta_admin_session', 'true');
-      localStorage.setItem('kricefesta_admin_remember', 'true');
+      const userInfo = {
+        username: data.username,
+        name: data.name,
+        isMaster: data.isMaster,
+        groupIds: data.groupIds
+      };
 
+      sessionStorage.setItem('kricefesta_admin_session', 'true');
+      sessionStorage.setItem('kricefesta_admin_user', JSON.stringify(userInfo));
+      localStorage.setItem('kricefesta_admin_remember', 'true');
+      localStorage.setItem('kricefesta_admin_user', JSON.stringify(userInfo));
+
+      setAdminUser(userInfo);
       setIsAuthed(true);
       showToast('성공적으로 관리자 콘솔에 접속하였습니다.');
     } catch (err) {
@@ -441,10 +538,141 @@ function App() {
   // 로그아웃
   const handleLogout = () => {
     localStorage.removeItem('kricefesta_admin_remember');
+    localStorage.removeItem('kricefesta_admin_user');
     sessionStorage.removeItem('kricefesta_admin_session');
+    sessionStorage.removeItem('kricefesta_admin_user');
+    setAdminUser(null);
     setIsAuthed(false);
     setView('dashboard');
   };
+
+  // 관리자 목록 조회
+  const fetchAdmins = async () => {
+    try {
+      const headers = {};
+      const cachedUser = localStorage.getItem('kricefesta_admin_user') || sessionStorage.getItem('kricefesta_admin_user');
+      if (cachedUser) {
+        const parsed = JSON.parse(cachedUser);
+        if (parsed && parsed.username) {
+          headers["X-Admin-Username"] = parsed.username;
+        }
+      }
+      const response = await fetch("http://localhost:18000/api/admin/admins", { headers });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === "success" && data.admins) {
+          setAdmins(data.admins);
+        }
+      }
+    } catch (e) {
+      console.error("관리자 목록 조회 실패:", e);
+    }
+  };
+
+  // 관리자 추가/수정 저장
+  const handleSaveAdmin = async (e) => {
+    e.preventDefault();
+    if (!adminUsername.trim() || !adminName.trim()) {
+      alert("아이디와 이름을 입력해 주세요.");
+      return;
+    }
+    if (!editingAdmin && !adminPassword.trim()) {
+      alert("비밀번호를 입력해 주세요.");
+      return;
+    }
+
+    const groupIdsStr = adminIsAllGroups ? "*" : adminGroupIds.join(",");
+
+    const payload = {
+      username: adminUsername.trim(),
+      password: adminPassword.trim() ? adminPassword.trim() : (editingAdmin ? "__KEEP_PASSWORD__" : ""),
+      name: adminName.trim(),
+      groupIds: groupIdsStr
+    };
+
+    const headers = {
+      "Content-Type": "application/json"
+    };
+    const cachedUser = localStorage.getItem('kricefesta_admin_user') || sessionStorage.getItem('kricefesta_admin_user');
+    if (cachedUser) {
+      const parsed = JSON.parse(cachedUser);
+      if (parsed && parsed.username) {
+        headers["X-Admin-Username"] = parsed.username;
+      }
+    }
+
+    try {
+      let url = "http://localhost:18000/api/admin/admins";
+      let method = "POST";
+
+      if (editingAdmin) {
+        url = `http://localhost:18000/api/admin/admins/${editingAdmin.id}`;
+        method = "PUT";
+      }
+
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      const resData = await response.json();
+      if (response.ok && resData.status === "success") {
+        showToast(editingAdmin ? "관리자 정보가 수정되었습니다." : "새 관리자가 추가되었습니다.");
+        setShowAdminForm(false);
+        setEditingAdmin(null);
+        setAdminUsername("");
+        setAdminPassword("");
+        setAdminName("");
+        setAdminGroupIds([]);
+        setAdminIsAllGroups(true);
+        fetchAdmins();
+      } else {
+        alert(resData.detail || "저장에 실패했습니다.");
+      }
+    } catch (err) {
+      console.error("관리자 저장 실패:", err);
+      alert("서버와 통신하는 중 오류가 발생했습니다.");
+    }
+  };
+
+  // 관리자 삭제
+  const handleDeleteAdmin = async (adminId) => {
+    if (!window.confirm("정말로 이 관리자를 삭제하시겠습니까?")) return;
+
+    const headers = {};
+    const cachedUser = localStorage.getItem('kricefesta_admin_user') || sessionStorage.getItem('kricefesta_admin_user');
+    if (cachedUser) {
+      const parsed = JSON.parse(cachedUser);
+      if (parsed && parsed.username) {
+        headers["X-Admin-Username"] = parsed.username;
+      }
+    }
+
+    try {
+      const response = await fetch(`http://localhost:18000/api/admin/admins/${adminId}`, {
+        method: "DELETE",
+        headers
+      });
+
+      const resData = await response.json();
+      if (response.ok && resData.status === "success") {
+        showToast("관리자가 삭제되었습니다.");
+        fetchAdmins();
+      } else {
+        alert(resData.detail || "삭제에 실패했습니다.");
+      }
+    } catch (err) {
+      console.error("관리자 삭제 실패:", err);
+      alert("서버와 통신하는 중 오류가 발생했습니다.");
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthed && view === 'admin-management') {
+      fetchAdmins();
+    }
+  }, [isAuthed, view]);
 
   // 새 품평회 대그룹 만들기
   const handleAddGroup = async () => {
@@ -727,9 +955,17 @@ function App() {
     saveState({ groups: nextGroups, systemName, systemCode, judges, bumans, products, templates });
 
     try {
+      const headers = { "Content-Type": "application/json" };
+      const cachedUser = localStorage.getItem('kricefesta_admin_user') || sessionStorage.getItem('kricefesta_admin_user');
+      if (cachedUser) {
+        const parsed = JSON.parse(cachedUser);
+        if (parsed && parsed.username) {
+          headers["X-Admin-Username"] = parsed.username;
+        }
+      }
       const response = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/save`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           systemName,
           systemCode,
@@ -919,6 +1155,27 @@ function App() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {(!adminUser || adminUser.isMaster) && (
+              <button
+                onClick={() => setView('admin-management')}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  color: '#fff',
+                  borderRadius: '11px',
+                  height: '50px',
+                  padding: '0 20px',
+                  fontSize: '15px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                ⚙️ 관리자 관리
+              </button>
+            )}
             <button
               onClick={handleAddGroup}
               style={{ background: '#e03b3b', border: 'none', color: '#fff', borderRadius: '11px', height: '50px', padding: '0 24px', fontSize: '15px', fontWeight: 800, cursor: 'pointer' }}
@@ -1049,6 +1306,259 @@ function App() {
             })}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // 2-2) 관리자 계정 관리 화면 렌더링 (`view === 'admin-management'`)
+  if (view === 'admin-management') {
+    return (
+      <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#eef1f6', color: '#2b3646', display: 'flex', flexDirection: 'column' }}>
+        {/* 상단 띠 배너 헤더 */}
+        <div style={{ background: 'linear-gradient(135deg,#1b2a4a,#243a63)', color: '#fff', padding: '30px 40px', display: 'flex', alignItems: 'center', gap: '20px', flexShrink: 0 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '12px', letterSpacing: '2px', color: '#d9b866', fontWeight: 700 }}>
+              ADMIN CONSOLE · ADMIN MANAGEMENT
+            </div>
+            <div style={{ marginTop: '8px', fontSize: '26px', fontWeight: 800 }}>
+              관리자 계정 관리
+            </div>
+            <div style={{ marginTop: '5px', fontSize: '14px', color: '#9db0d4' }}>
+              서브 관리자 계정을 생성하고 대시보드(대그룹) 관리 권한 범위를 구성합니다.
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={() => {
+                setEditingAdmin(null);
+                setAdminUsername('');
+                setAdminPassword('');
+                setAdminName('');
+                setAdminGroupIds([]);
+                setAdminIsAllGroups(true);
+                setShowAdminForm(true);
+              }}
+              style={{ background: '#e03b3b', border: 'none', color: '#fff', borderRadius: '11px', height: '50px', padding: '0 24px', fontSize: '15px', fontWeight: 800, cursor: 'pointer' }}
+            >
+              + 새 관리자 추가
+            </button>
+            <button
+              onClick={() => setView('dashboard')}
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                color: '#fff',
+                borderRadius: '11px',
+                height: '50px',
+                padding: '0 20px',
+                fontSize: '15px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              ↩ 대시보드로 돌아가기
+            </button>
+          </div>
+        </div>
+
+        {/* 메인 테이블 배치 */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '28px 40px 60px' }}>
+          <div style={{ fontSize: '15px', fontWeight: 800, color: '#1b2a4a', marginBottom: '14px' }}>
+            등록된 관리자 목록
+          </div>
+
+          <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[1200px] shadow-sm">
+            <div className="grid grid-cols-[56px_1.5fr_1.5fr_1.2fr_2.5fr_1.5fr_120px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
+              <div className="p-3 text-center">No.</div>
+              <div className="p-3">관리자 ID</div>
+              <div className="p-3">이름</div>
+              <div className="p-3">비밀번호</div>
+              <div className="p-3">관리 권한 (대그룹)</div>
+              <div className="p-3">생성일</div>
+              <div className="p-3 text-center">관리</div>
+            </div>
+
+            {admins.length === 0 ? (
+              <div className="p-8 text-center text-[13px] text-[#8b97ab]">등록된 서브 관리자가 없습니다.</div>
+            ) : admins.map((admin, idx) => {
+              // 권한 파싱 및 이름 매핑
+              let scopeText = "";
+              if (admin.groupIds === "*") {
+                scopeText = "전체 대시보드 관리";
+              } else {
+                const ids = admin.groupIds.split(",").map(id => parseInt(id.trim(), 10));
+                const names = ids.map(id => groups.find(g => g.id === id)?.name || `대그룹 #${id}`);
+                scopeText = names.join(", ");
+              }
+
+              return (
+                <div key={admin.id} className="grid grid-cols-[56px_1.5fr_1.5fr_1.2fr_2.5fr_1.5fr_120px] border-b border-[#eef1f6] items-center last:border-b-0 text-[14px]">
+                  <div className="p-3 text-center font-bold text-[#8b97ab]">{idx + 1}</div>
+                  <div className="p-3 font-semibold text-[#1b2a4a]">{admin.username}</div>
+                  <div className="p-3 font-semibold text-[#1b2a4a]">{admin.name}</div>
+                  <div className="p-3 text-[#5a6a82] font-mono">••••••••</div>
+                  <div className="p-3 text-[#5a6a82] font-medium truncate" title={scopeText}>{scopeText}</div>
+                  <div className="p-3 text-[13px] text-[#8b97ab]">{admin.createdAt || '-'}</div>
+                  <div className="p-3 text-center flex items-center justify-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        setEditingAdmin(admin);
+                        setAdminUsername(admin.username);
+                        setAdminPassword('');
+                        setAdminName(admin.name);
+                        if (admin.groupIds === "*") {
+                          setAdminIsAllGroups(true);
+                          setAdminGroupIds([]);
+                        } else {
+                          setAdminIsAllGroups(false);
+                          setAdminGroupIds(admin.groupIds.split(",").map(x => parseInt(x.trim(), 10)).filter(Boolean));
+                        }
+                        setShowAdminForm(true);
+                      }}
+                      className="h-[30px] px-2.5 border border-[#dde3ec] bg-white hover:bg-gray-50 text-[#1b2a4a] rounded-lg text-[12px] font-bold cursor-pointer transition-all"
+                    >
+                      수정
+                    </button>
+                    <button
+                      onClick={() => handleDeleteAdmin(admin.id)}
+                      className="h-[30px] px-2.5 border border-red-100 bg-white hover:bg-red-50 text-[#c0392b] rounded-lg text-[12px] font-bold cursor-pointer transition-all"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 관리자 등록/수정 모달 다이얼로그 */}
+        {showAdminForm && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-[520px] max-w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+              {/* 모달 헤더 */}
+              <div className="p-6 border-b border-[#eef1f6] flex items-center justify-between bg-gradient-to-r from-[#1b2a4a] to-[#243a63] text-white">
+                <h3 className="text-[17px] font-extrabold">
+                  {editingAdmin ? "관리자 계정 정보 수정" : "새 관리자 계정 추가"}
+                </h3>
+                <button
+                  onClick={() => setShowAdminForm(false)}
+                  className="text-white/60 hover:text-white text-[20px] font-bold cursor-pointer"
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* 모달 본문 */}
+              <form onSubmit={handleSaveAdmin} className="p-6 overflow-y-auto flex-1 space-y-4">
+                <div>
+                  <label className="block text-[11px] font-extrabold text-[#5a6a82] mb-1.5">
+                    관리자 로그인 ID
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={adminUsername}
+                    onChange={(e) => setAdminUsername(e.target.value)}
+                    placeholder="예: krice_sub1"
+                    className="w-full h-[44px] border border-[#dde3ec] rounded-xl px-3.5 text-[14px] focus:outline-none focus:border-[#1b2a4a] transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-extrabold text-[#5a6a82] mb-1.5">
+                    로그인 비밀번호 {editingAdmin && <span className="text-gray-400 font-normal">(변경 시에만 입력)</span>}
+                  </label>
+                  <input
+                    type="text"
+                    required={!editingAdmin}
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    placeholder={editingAdmin ? "기존 비밀번호 유지하려면 비워둠" : "접속 비밀번호 입력"}
+                    className="w-full h-[44px] border border-[#dde3ec] rounded-xl px-3.5 text-[14px] font-mono focus:outline-none focus:border-[#1b2a4a] transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-extrabold text-[#5a6a82] mb-1.5">
+                    관리자 이름
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={adminName}
+                    onChange={(e) => setAdminName(e.target.value)}
+                    placeholder="예: 홍길동 평가담당"
+                    className="w-full h-[44px] border border-[#dde3ec] rounded-xl px-3.5 text-[14px] focus:outline-none focus:border-[#1b2a4a] transition-all"
+                  />
+                </div>
+
+                {/* 대시보드 권한 지정 */}
+                <div>
+                  <label className="block text-[11px] font-extrabold text-[#5a6a82] mb-2">
+                    관리 대시보드 (대그룹) 설정
+                  </label>
+                  
+                  <div className="bg-[#f4f6fa] rounded-xl p-4 border border-[#e5e9f0]">
+                    <label className="flex items-center gap-2 font-extrabold text-[#1b2a4a] text-[13px] cursor-pointer mb-2.5 pb-2 border-b border-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={adminIsAllGroups}
+                        onChange={(e) => setAdminIsAllGroups(e.target.checked)}
+                        className="w-4.5 h-4.5 cursor-pointer"
+                      />
+                      전체 대시보드 관리 권한 부여
+                    </label>
+
+                    {!adminIsAllGroups && (
+                      <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
+                        {groups.length === 0 ? (
+                          <div className="text-[11px] text-[#8b97ab]">개설된 대그룹 품평회가 없습니다.</div>
+                        ) : groups.map(g => (
+                          <label key={g.id} className="flex items-center gap-2 text-[13px] text-[#2b3646] font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={adminGroupIds.includes(g.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAdminGroupIds([...adminGroupIds, g.id]);
+                                } else {
+                                  setAdminGroupIds(adminGroupIds.filter(id => id !== g.id));
+                                }
+                              }}
+                              className="w-4 h-4 cursor-pointer"
+                            />
+                            {g.name}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 푸터 버튼 */}
+                <div className="pt-4 border-t border-[#eef1f6] flex items-center justify-end gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminForm(false)}
+                    className="h-[44px] px-5 border border-[#dde3ec] text-[#5a6a82] hover:bg-gray-50 rounded-xl text-[14px] font-bold cursor-pointer transition-all"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    className="h-[44px] px-6 bg-[#e03b3b] hover:bg-[#c0392b] text-white rounded-xl text-[14px] font-extrabold cursor-pointer transition-all shadow-md"
+                  >
+                    저장하기
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
