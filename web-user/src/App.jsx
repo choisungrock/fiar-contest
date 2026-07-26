@@ -108,7 +108,7 @@ function App() {
     }
   }, [systemName]);
 
-  // 마운트 시 로컬 세션(평가자/완료 상태) 복구
+  // 마운트 시 로컬 세션(평가자/완료 상태/화면 상태) 복구
   useEffect(() => {
     if (!groupName) return;
     (async () => {
@@ -119,12 +119,32 @@ function App() {
           if (sess.judgeId) setJudgeId(sess.judgeId);
           if (sess.completed) setCompleted(sess.completed);
           if (sess.deviceLabel) setDeviceLabel(sess.deviceLabel);
+          
+          if (sess.judgeName && sess.judgeId) {
+            const localScores = await loadJudgeScores(groupName, sess.judgeName);
+            setScores(localScores);
+            
+            const restoredScreen = sess.screen || 'start';
+            setScreen(restoredScreen);
+            window.history.replaceState({ screen: restoredScreen }, '');
+            
+            if (sess.selectedBuman) {
+              setSelectedBuman(sess.selectedBuman);
+            }
+          }
         }
       } catch (e) {
         console.error('세션 복구 에러:', e);
       }
     })();
   }, [groupName]);
+
+  // 활성 부문 변경 시 세션에 자동 저장
+  useEffect(() => {
+    if (groupName && selectedBuman) {
+      saveSession(groupName, { selectedBuman });
+    }
+  }, [selectedBuman, groupName]);
 
   // 온라인 복귀 시 미동기화 점수 자동 전송
   useEffect(() => {
@@ -142,7 +162,7 @@ function App() {
       setAccess('denied');
       return;
     }
-    const applyInit = (data) => {
+    const applyInit = async (data) => {
       if (data.systemName) setSystemName(data.systemName);
       if (data.period) setPeriod(data.period);
       if (data.bumans && data.bumans.length > 0) {
@@ -158,7 +178,14 @@ function App() {
           };
         });
         setBumans(mappedBumans);
-        setSelectedBuman(mappedBumans[0].prefix);
+        
+        // 세션 정보 확인하여 이전에 탭(selectedBuman)이 저장되어 있다면 복원, 없으면 첫번째 지정
+        const s = await getSession(groupName);
+        if (s && s.selectedBuman) {
+          setSelectedBuman(s.selectedBuman);
+        } else {
+          setSelectedBuman(mappedBumans[0].prefix);
+        }
       }
       if (data.products) setProductsMap(data.products);
       if (data.templates) setTemplatesMap(data.templates);
@@ -187,7 +214,7 @@ function App() {
           });
           if (res.ok) {
             const data = await res.json();
-            applyInit(data);
+            await applyInit(data);
             try { await cacheInit(groupName, data); } catch (ce) { console.error('대회 캐시 저장 에러:', ce); }
             setAccess('granted');
           } else {
@@ -206,7 +233,7 @@ function App() {
           if (sess && sess.deviceStatus === 'approved' && sess.authKey && cached) {
             setAuthKey(sess.authKey);
             setDeviceStatus('approved');
-            applyInit(cached);
+            await applyInit(cached);
             setAccess('granted');
           } else {
             setDeviceStatus((sess && sess.deviceStatus) ? sess.deviceStatus : 'offline');
@@ -285,22 +312,31 @@ function App() {
     }, 2000);
   };
 
-  // 화면 이동 헬퍼: 브라우저 히스토리에 기록해 뒤로가기 지원
+  // 화면 이동 헬퍼: 브라우저 히스토리에 기록해 뒤로가기 지원 및 세션 상태 동기화
   const navTo = (next) => {
     window.history.pushState({ screen: next }, '');
     setScreen(next);
+    saveSession(groupName, { screen: next });
   };
 
   // 브라우저 뒤로/앞으로 가기와 화면 상태 동기화
   useEffect(() => {
-    window.history.replaceState({ screen: 'start' }, '');
-    const onPop = (e) => {
+    const initHistory = async () => {
+      const sess = await getSession(groupName);
+      const initialScreen = sess && sess.screen ? sess.screen : 'start';
+      window.history.replaceState({ screen: initialScreen }, '');
+    };
+    initHistory();
+
+    const onPop = async (e) => {
       const st = e.state;
-      setScreen(st && st.screen ? st.screen : 'start');
+      const nextScreen = st && st.screen ? st.screen : 'start';
+      setScreen(nextScreen);
+      await saveSession(groupName, { screen: nextScreen });
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  }, [groupName]);
 
   // 현재 활성 부문 객체 조회
   const buman = bumans.find((b) => b.key === selectedBuman) || bumans[0] || BUMANS[0];
