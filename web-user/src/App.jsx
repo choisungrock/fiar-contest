@@ -8,6 +8,28 @@ import {
   getDeviceKey,
 } from './db';
 
+// API Base URL 자동 인젝션용 fetch 랩핑
+const originalFetch = window.fetch;
+window.fetch = async (input, init) => {
+  let url = typeof input === 'string' ? input : input.url;
+  
+  const backendBase = "http://localhost:18000/api";
+  const configuredBase = (import.meta.env.VITE_API_URL || backendBase).replace(/\/$/, "");
+  
+  if (url.startsWith(backendBase)) {
+    url = url.replace(backendBase, configuredBase);
+  } else if (url.startsWith("/api")) {
+    url = configuredBase + url.substring(4);
+  }
+  
+  if (typeof input === 'string') {
+    return originalFetch(url, init);
+  } else {
+    const newRequest = new Request(url, input);
+    return originalFetch(newRequest, init);
+  }
+};
+
 // 디자인 시안의 상수 데이터 이식
 const ITEMS = {
   ricefood: {
