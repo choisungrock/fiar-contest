@@ -837,19 +837,12 @@ function App() {
             
             <div className="flex-grow"></div>
             
-            {/* 평가자명 입력 박스 */}
+            {/* 평가자명 표시 박스 (수정 불가) */}
             <div className="flex items-center gap-[10px] bg-[#243a63] border border-[#3a4f78] rounded-[10px] py-[7px] px-[14px] shrink-0">
               <span className="text-[13px] text-textBlue font-semibold whitespace-nowrap">평가자</span>
-              <input
-                type="text"
-                value={judgeName}
-                onChange={(e) => {
-                  setJudgeName(e.target.value);
-                  saveSession(groupName, { judgeName: e.target.value });
-                }}
-                placeholder="성명 입력"
-                className="w-[130px] h-[34px] border-none rounded-[7px] px-[12px] text-[15px] font-bold text-primary bg-white focus:outline-none"
-              />
+              <span className="text-[15px] font-bold text-white px-[4px] select-text">
+                {judgeName}
+              </span>
             </div>
             
             {/* 입력 진행 지표 */}
