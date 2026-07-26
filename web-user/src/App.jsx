@@ -853,12 +853,14 @@ function App() {
               </div>
             </div>
 
+            {/*
             <button
               onClick={handleSaveExcel}
               className="bg-white border border-white text-accent-red-hover text-[#c0392b] rounded-[10px] h-[42px] px-[18px] text-[14px] font-extrabold hover:bg-gray-100 transition-all shrink-0"
             >
               엑셀저장
             </button>
+            */}
             
             <button
               onClick={handleComplete}
