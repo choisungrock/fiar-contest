@@ -1462,10 +1462,13 @@ function App() {
                   <input
                     type="text"
                     required
+                    readOnly={!!editingAdmin}
                     value={adminUsername}
                     onChange={(e) => setAdminUsername(e.target.value)}
                     placeholder="예: krice_sub1"
-                    className="w-full h-[44px] border border-[#dde3ec] rounded-xl px-3.5 text-[14px] focus:outline-none focus:border-[#1b2a4a] transition-all"
+                    className={`w-full h-[44px] border border-[#dde3ec] rounded-xl px-3.5 text-[14px] focus:outline-none focus:border-[#1b2a4a] transition-all ${
+                      editingAdmin ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
+                    }`}
                   />
                 </div>
 

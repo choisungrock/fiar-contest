@@ -723,6 +723,7 @@ def create_admin(req: CreateAdminRequest, x_admin_username: Optional[str] = Head
     """신규 관리자 추가 (마스터 또는 전체 권한 관리자 허용)"""
     if not is_authorized_admin(x_admin_username):
         raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 또는 전체 권한 관리자만 접근 가능합니다.")
+    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
     try:
         with engine.connect() as conn:
             with conn.begin():
@@ -746,6 +747,7 @@ def update_admin(fa_id: int, req: UpdateAdminRequest, x_admin_username: Optional
     """관리자 정보 수정 (마스터 또는 전체 권한 관리자 허용)"""
     if not is_authorized_admin(x_admin_username):
         raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 또는 전체 권한 관리자만 접근 가능합니다.")
+    env_master = os.getenv("ADMIN_MASTER", "adminmaster").strip()
     try:
         with engine.connect() as conn:
             with conn.begin():
