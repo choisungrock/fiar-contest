@@ -1,6 +1,7 @@
 # 관리자 기능 관련 API 요청을 처리하는 APIRouter 정의 파일
 import os
 import secrets
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, status, Header
 from typing import Union, Optional
 from pydantic import BaseModel
@@ -8,6 +9,23 @@ from pydantic import BaseModel
 import hashlib
 
 router = APIRouter()
+
+KST = timezone(timedelta(hours=9))
+
+def format_kst(dt):
+    if not dt:
+        return ""
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except Exception:
+            return dt
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        kst_dt = dt.astimezone(KST)
+        return kst_dt.strftime("%Y-%m-%d %H:%M:%S")
+    return str(dt)
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
@@ -595,7 +613,7 @@ def list_devices(fg_id: int):
                     "deviceKey": r[1],
                     "label": r[2] or "",
                     "status": r[3],
-                    "lastSeen": str(r[4]) if r[4] else ""
+                    "lastSeen": format_kst(r[4])
                 })
             return {"status": "success", "enrollOpen": bool(enroll), "devices": devices}
     except Exception as e:
@@ -712,7 +730,7 @@ def list_admins(x_admin_username: Optional[str] = Header(None)):
                     "password": r[2],
                     "name": r[3],
                     "groupIds": r[4],
-                    "createdAt": str(r[5]) if r[5] else ""
+                    "createdAt": format_kst(r[5])
                 })
             return {"status": "success", "admins": admins_list}
     except Exception as e:

@@ -43,6 +43,34 @@ const NAV = [
   { key: 'results', icon: '★', label: '결과' },
 ];
 
+// 한국 표준시(KST, UTC+9) 날짜 포맷팅 헬퍼
+function formatKstDate(dateStr) {
+  if (!dateStr) return '-';
+  const str = String(dateStr).trim();
+  if (!str) return '-';
+
+  try {
+    if (str.includes('T') || str.includes('Z')) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return new Intl.DateTimeFormat('ko-KR', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+          timeZone: 'Asia/Seoul'
+        }).format(d).replace(/\. /g, '-').replace('.', '');
+      }
+    }
+    return str;
+  } catch (e) {
+    return str;
+  }
+}
+
 // 배점 기반 5단계 척도 분할 헬퍼
 function scaleOf(max) {
   const m = Number(max) || 0;
@@ -1402,7 +1430,7 @@ function App() {
                   <div className="p-3 font-semibold text-[#1b2a4a]">{admin.name}</div>
                   <div className="p-3 text-[#5a6a82] font-mono">••••••••</div>
                   <div className="p-3 text-[#5a6a82] font-medium truncate" title={scopeText}>{scopeText}</div>
-                  <div className="p-3 text-[13px] text-[#8b97ab]">{admin.createdAt || '-'}</div>
+                  <div className="p-3 text-[13px] text-[#8b97ab]">{formatKstDate(admin.createdAt)}</div>
                   <div className="p-3 text-center flex items-center justify-center gap-1.5">
                     <button
                       onClick={() => {
@@ -2557,7 +2585,7 @@ function App() {
                       {d.status === 'approved' ? '승인됨' : d.status === 'blocked' ? '차단됨' : '대기'}
                     </span>
                   </div>
-                  <div className="p-3 text-[13px] text-[#8b97ab]">{d.lastSeen || '-'}</div>
+                  <div className="p-3 text-[13px] text-[#8b97ab]">{formatKstDate(d.lastSeen)}</div>
                   <div className="p-3 text-[12px] text-[#9aa6bb]">…{(d.deviceKey || '').slice(-8)}</div>
                   <div className="p-3 text-center">
                     <input type="checkbox" checked={d.status === 'approved'} onChange={(e) => changeDeviceStatus(d.id, e.target.checked ? 'approved' : 'pending')} className="w-5 h-5 cursor-pointer" />
