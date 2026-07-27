@@ -2702,7 +2702,7 @@ function App() {
 
                 return {
                   code: p.code,
-                  name: isBlind ? '블라인드 제품' : p.name,
+                  name: p.name || '블라인드 제품',
                   scores: listScores.map((v, idx) => ({
                     val: v,
                     isMin: idx === minIdx && canTrim,
@@ -2726,7 +2726,7 @@ function App() {
                   const detailed = getJudgeDetailedScores(pIdx, jIdx, p);
                   return {
                     code: p.code,
-                    name: isBlind ? '블라인드 제품' : p.name,
+                    name: p.name || '블라인드 제품',
                     detailed
                   };
                 });
@@ -3177,7 +3177,45 @@ function App() {
                               sheetRows.push(dataRow);
                             });
 
+                            const merges = [];
+                            let colIdx = 0;
+
+                            // 제품분류코드 & 제품명 2행 세로 병합
+                            merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
+                            colIdx += 1;
+                            merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
+                            colIdx += 1;
+
+                            if (matchTemplate && matchTemplate.groups) {
+                              matchTemplate.groups.forEach((g) => {
+                                const gItems = g.items || [];
+                                if (gItems.length > 0) {
+                                  // 그룹 항목명 가로 병합 (항목 수 > 1)
+                                  if (gItems.length > 1) {
+                                    merges.push({ s: { r: 0, c: colIdx }, e: { r: 0, c: colIdx + gItems.length - 1 } });
+                                  }
+                                  colIdx += gItems.length;
+                                }
+                                // 그룹 배점합계 & 환산점수 2행 세로 병합
+                                merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
+                                colIdx += 1;
+                                merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
+                                colIdx += 1;
+                              });
+                            }
+
+                            // 최종 배점합계, 환산점수, 최종환산합계, 순위 2행 세로 병합
+                            merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
+                            colIdx += 1;
+                            merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
+                            colIdx += 1;
+                            merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
+                            colIdx += 1;
+                            merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
+                            colIdx += 1;
+
                             const wsJudge = XLSX.utils.aoa_to_sheet(sheetRows);
+                            wsJudge['!merges'] = merges;
                             const safeSheetName = sheet.judgeName.substring(0, 25) + " 평가";
                             XLSX.utils.book_append_sheet(wb, wsJudge, safeSheetName);
                           });

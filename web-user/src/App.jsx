@@ -123,14 +123,17 @@ function App() {
           if (sess.judgeName && sess.judgeId) {
             const localScores = await loadJudgeScores(groupName, sess.judgeName);
             setScores(localScores);
-            
-            const restoredScreen = sess.screen || 'start';
-            setScreen(restoredScreen);
-            window.history.replaceState({ screen: restoredScreen }, '');
-            
-            if (sess.selectedBuman) {
-              setSelectedBuman(sess.selectedBuman);
-            }
+          }
+          
+          // 새로고침(F5) 등 history.state가 유지될 때만 직전 화면 복원, 기본은 심사위원 입력(start) 화면
+          const restoredScreen = (window.history.state && window.history.state.screen) 
+            ? window.history.state.screen 
+            : 'start';
+          setScreen(restoredScreen);
+          window.history.replaceState({ screen: restoredScreen }, '');
+          
+          if (sess.selectedBuman) {
+            setSelectedBuman(sess.selectedBuman);
           }
         }
       } catch (e) {
@@ -203,7 +206,13 @@ function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceKey: dk })
         });
-        const rdata = await reg.json();
+        const rdata = await reg.json().catch(() => ({}));
+        if (!reg.ok) {
+          if (reg.status === 404 || (rdata && rdata.detail && rdata.detail.includes("대회 정보가 존재하지 않습니다"))) {
+            setAccess('denied');
+            return;
+          }
+        }
         setDeviceStatus(rdata.status);
         if (rdata.status === 'approved' && rdata.authKey) {
           setAuthKey(rdata.authKey);
@@ -454,7 +463,15 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceKey: dk, label })
       });
-      const rdata = await reg.json();
+      const rdata = await reg.json().catch(() => ({}));
+      if (!reg.ok) {
+        if (reg.status === 404 || (rdata && rdata.detail && rdata.detail.includes("대회 정보가 존재하지 않습니다"))) {
+          setAccess('denied');
+          return;
+        }
+        alert(rdata.detail || '기기 등록에 실패했습니다.');
+        return;
+      }
       setDeviceStatus(rdata.status);
       await saveSession(groupName, { deviceLabel: label, deviceStatus: rdata.status });
       if (rdata.status === 'approved') {
@@ -821,10 +838,10 @@ function App() {
           {/* 상단 네비게이션 헤더 */}
           <div className="bg-[#1b2a4a] color-white text-white padding-x-[22px] px-[22px] py-[12px] flex items-center gap-[18px] shrink-0">
             <button
-              onClick={() => window.history.back()}
+              onClick={() => navTo('start')}
               className="bg-transparent border border-[#45577f] text-[#c6d2ea] rounded-[9px] h-[40px] px-[14px] font-semibold cursor-pointer text-[14px] hover:bg-[#243a63] transition-all"
             >
-              ← 부문
+              ← 부문 / 평가자
             </button>
             <div className="min-w-0">
               <div className="text-[16px] font-extrabold truncate">
