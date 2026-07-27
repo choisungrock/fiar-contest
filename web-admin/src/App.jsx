@@ -973,9 +973,17 @@ function App() {
     };
 
     const nextPeriod = makePeriodString();
+    const currentProductCount = Object.values(products).reduce((acc, list) => acc + (list || []).length, 0);
     const nextGroups = groups.map(g => {
       if (g.id === activeGroup) {
-        return { ...g, name: systemName, period: nextPeriod };
+        return {
+          ...g,
+          name: systemName,
+          period: nextPeriod,
+          bumanCount: bumans.length,
+          judgeCount: judges.length,
+          productCount: currentProductCount
+        };
       }
       return g;
     });
@@ -1261,10 +1269,10 @@ function App() {
                   ? { bg: '#eef7f1', fg: '#2f7a4f', bar: '#2f7a4f' }
                   : { bg: '#f4f6fa', fg: '#8b97ab', bar: '#c3ccdb' };
 
-              const isCurrentActive = view === 'console' && group.id === activeGroup;
-              const bumanCount = isCurrentActive ? counts.bumans : (group.bumanCount !== undefined ? group.bumanCount : (group.status === '준비중' ? 0 : 4));
-              const judgeCount = isCurrentActive ? counts.judges : (group.judgeCount !== undefined ? group.judgeCount : (group.status === '준비중' ? 0 : 3));
-              const productCount = isCurrentActive ? counts.products : (group.productCount !== undefined ? group.productCount : (group.status === '준비중' ? 0 : 8));
+              const isCurrentActive = group.id === activeGroup;
+              const bumanCount = isCurrentActive && bumans.length > 0 ? counts.bumans : (group.bumanCount !== undefined ? group.bumanCount : 0);
+              const judgeCount = isCurrentActive && judges.length > 0 ? counts.judges : (group.judgeCount !== undefined ? group.judgeCount : 0);
+              const productCount = isCurrentActive && Object.keys(products).length > 0 ? counts.products : (group.productCount !== undefined ? group.productCount : 0);
 
               return (
                 <div
@@ -1304,12 +1312,12 @@ function App() {
 
                   <div style={{ marginTop: '18px', display: 'flex', gap: '22px' }}>
                     <div>
-                      <div style={{ fontSize: '11px', color: '#9aa6bb', fontWeight: 600 }}>부문</div>
-                      <div style={{ marginTop: '2px', fontSize: '20px', fontWeight: 800, color: '#3a475c' }}>{bumanCount}</div>
-                    </div>
-                    <div>
                       <div style={{ fontSize: '11px', color: '#9aa6bb', fontWeight: 600 }}>평가자</div>
                       <div style={{ marginTop: '2px', fontSize: '20px', fontWeight: 800, color: '#3a475c' }}>{judgeCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#9aa6bb', fontWeight: 600 }}>부문</div>
+                      <div style={{ marginTop: '2px', fontSize: '20px', fontWeight: 800, color: '#3a475c' }}>{bumanCount}</div>
                     </div>
                     <div>
                       <div style={{ fontSize: '11px', color: '#9aa6bb', fontWeight: 600 }}>제품</div>
