@@ -456,12 +456,26 @@ def get_group_details(fg_id: int, x_admin_username: Optional[str] = Header(None)
             
 
 
+            # 심사위원 점수 기록 존재 여부 확인
+            score_count = conn.execute(
+                text("""
+                    SELECT COUNT(*) FROM fair_score_record r
+                    JOIN fair_product p ON r.fsr_fp_id = p.fp_id
+                    JOIN fair_buman b ON p.fp_fb_id = b.fb_id
+                    WHERE b.fb_fg_id = :fg_id
+                """),
+                {"fg_id": fg_id}
+            ).scalar() or 0
+            has_evaluations = score_count > 0
+
             return {
                 "status": "success",
                 "systemName": system_name,
                 "systemCode": system_code,
                 "period": period,
                 "groupStatus": status,
+                "hasEvaluations": has_evaluations,
+                "scoreCount": score_count,
                 "judges": judges_list,
                 "bumans": bumans_list,
                 "products": products_map,
@@ -498,6 +512,17 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest, x_admin_username: Op
         with engine.connect() as conn:
             trans = conn.begin()
             try:
+                # 심사위원 점수 기록 존재 여부 검증
+                score_count = conn.execute(
+                    text("""
+                        SELECT COUNT(*) FROM fair_score_record r
+                        JOIN fair_product p ON r.fsr_fp_id = p.fp_id
+                        JOIN fair_buman b ON p.fp_fb_id = b.fb_id
+                        WHERE b.fb_fg_id = :fg_id
+                    """),
+                    {"fg_id": fg_id}
+                ).scalar() or 0
+
                 # 1. 대회 정보 업데이트
                 conn.execute(
                     text("UPDATE fair_group SET fg_name = :name, fg_period = :period, fg_status = :status, fg_code = :code WHERE fg_id = :fg_id"),

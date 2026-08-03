@@ -193,6 +193,7 @@ function App() {
   const [bumans, setBumans] = useState([]);
   const [products, setProducts] = useState({});
   const [templates, setTemplates] = useState([]);
+  const [hasEvaluations, setHasEvaluations] = useState(false);
 
   // 엑셀 일괄 등록 모달 관련 상태
   const [showExcelUploadModal, setShowExcelUploadModal] = useState(false);
@@ -362,6 +363,7 @@ function App() {
         if (data.status === "success" || data.judges !== undefined) {
           setSystemName(data.systemName || '');
           setSystemCode(data.systemCode || '');
+          setHasEvaluations(!!data.hasEvaluations);
           setJudges(data.judges || []);
           setBumans(data.bumans || []);
           setProducts(data.products || {});
@@ -2168,9 +2170,20 @@ function App() {
                     엑셀 다운로드
                   </button>
                   <button
-                    onClick={() => setShowExcelUploadModal(true)}
-                    className="flex items-center gap-1.5 h-[38px] px-3.5 bg-[#1b2a4a] text-white rounded-lg text-[13px] font-bold cursor-pointer hover:bg-[#2c3e66] transition-all shadow-sm"
-                    title="엑셀 파일 일괄 등록"
+                    disabled={hasEvaluations}
+                    onClick={() => {
+                      if (hasEvaluations) {
+                        alert('이미 심사위원 평가 점수가 입력된 품평회는 부문 및 제품을 엑셀로 변경할 수 없습니다.');
+                        return;
+                      }
+                      setShowExcelUploadModal(true);
+                    }}
+                    className={`flex items-center gap-1.5 h-[38px] px-3.5 rounded-lg text-[13px] font-bold transition-all shadow-sm ${
+                      hasEvaluations
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+                        : 'bg-[#1b2a4a] text-white cursor-pointer hover:bg-[#2c3e66]'
+                    }`}
+                    title={hasEvaluations ? "평가 점수가 입력된 대회는 엑셀 변경이 제한됩니다" : "엑셀 파일 일괄 등록"}
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -2321,9 +2334,20 @@ function App() {
                       엑셀 다운로드
                     </button>
                     <button
-                      onClick={() => setShowExcelUploadModal(true)}
-                      className="flex items-center gap-1.5 h-[38px] px-3.5 bg-[#1b2a4a] text-white rounded-lg text-[13px] font-bold cursor-pointer hover:bg-[#2c3e66] transition-all shadow-sm"
-                      title="엑셀 파일 일괄 등록"
+                      disabled={hasEvaluations}
+                      onClick={() => {
+                        if (hasEvaluations) {
+                          alert('이미 심사위원 평가 점수가 입력된 품평회는 부문 및 제품을 엑셀로 변경할 수 없습니다.');
+                          return;
+                        }
+                        setShowExcelUploadModal(true);
+                      }}
+                      className={`flex items-center gap-1.5 h-[38px] px-3.5 rounded-lg text-[13px] font-bold transition-all shadow-sm ${
+                        hasEvaluations
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+                          : 'bg-[#1b2a4a] text-white cursor-pointer hover:bg-[#2c3e66]'
+                      }`}
+                      title={hasEvaluations ? "평가 점수가 입력된 대회는 엑셀 변경이 제한됩니다" : "엑셀 파일 일괄 등록"}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
