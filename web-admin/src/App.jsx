@@ -193,6 +193,12 @@ function App() {
   const [bumans, setBumans] = useState([]);
   const [products, setProducts] = useState({});
   const [templates, setTemplates] = useState([]);
+
+  // 엑셀 일괄 등록 모달 관련 상태
+  const [showExcelUploadModal, setShowExcelUploadModal] = useState(false);
+  const [excelParsedData, setExcelParsedData] = useState(null);
+  const [excelFileName, setExcelFileName] = useState('');
+  const [excelErrorMsg, setExcelErrorMsg] = useState('');
   const [activeTemplateId, setActiveTemplateId] = useState(null);
   const [devices, setDevices] = useState([]);
   const [enrollOpen, setEnrollOpen] = useState(true);
@@ -706,6 +712,7 @@ function App() {
   // 새 품평회 대그룹 만들기
   const handleAddGroup = async () => {
     const name = "새 품평회 (제목 입력)";
+    const defaultCode = "fair_" + Date.now().toString(36);
 
     try {
       const response = await fetch("http://localhost:18000/api/admin/groups", {
@@ -714,7 +721,8 @@ function App() {
         body: JSON.stringify({
           name: name,
           period: "",
-          status: "준비중"
+          status: "준비중",
+          code: defaultCode
         })
       });
 
@@ -722,7 +730,8 @@ function App() {
         showToast('새 대그룹 품평회가 추가되었습니다.');
         fetchGroups(); // 백엔드에 쿼리하여 리스트 즉시 리로드
       } else {
-        alert("대그룹 생성에 실패하였습니다.");
+        const errData = await response.json().catch(() => ({}));
+        alert(errData.detail || "대그룹 생성에 실패하였습니다.");
       }
     } catch (e) {
       console.error("대그룹 생성 오류:", e);
@@ -1045,6 +1054,217 @@ function App() {
       });
       showToast('모든 설정 변경 사항이 로컬 스토리지에 동기화 저장되었습니다.');
     }
+  };
+
+  // 부문 및 부문별제품 엑셀 양식/데이터 다운로드 (등록된 데이터가 있으면 내보내기, 없으면 빈 양식)
+  const handleDownloadExcelSample = () => {
+    try {
+      const hasBumans = bumans && bumans.length > 0;
+      const evalHeaderKey = '평가방식(오픈 또는 블라인드 만 넣어주세요)';
+
+      // 1. 부문등록 시트 데이터 구성
+      let bumanData = [];
+      if (hasBumans) {
+        bumanData = bumans.map(b => ({
+          '부문코드': b.prefix || '',
+          [evalHeaderKey]: (b.cat === 'blind' || b.type === 'blind') ? '블라인드' : '오픈',
+          '부문그룹': b.group || '',
+          '부문명': b.name || ''
+        }));
+      } else {
+        // 등록된 부문이 없으면 양식용 헤더 및 가이드 샘플 1행 제공
+        bumanData = [
+          { '부문코드': 'A', [evalHeaderKey]: '오픈', '부문그룹': '쌀가공식품', '부문명': '조리' }
+        ];
+      }
+
+      // 2. 부문별제품 시트 데이터 구성
+      let productData = [];
+      if (hasBumans) {
+        bumans.forEach(b => {
+          const prefix = b.prefix;
+          const prodList = products[prefix] || [];
+          prodList.forEach(p => {
+            productData.push({
+              '부문코드': prefix,
+              '제품 분류코드': p.code || '',
+              '제품명': p.name || ''
+            });
+          });
+        });
+      } else {
+        // 등록된 제품이 없으면 양식용 헤더 및 가이드 샘플 1행 제공
+        productData = [
+          { '부문코드': 'A', '제품 분류코드': 'A-1', '제품명': '미라클누룽지' }
+        ];
+      }
+
+      const wb = XLSX.utils.book_new();
+      const wsBuman = XLSX.utils.json_to_sheet(bumanData);
+      const wsProduct = XLSX.utils.json_to_sheet(productData);
+
+      wsBuman['!cols'] = [{ wch: 12 }, { wch: 42 }, { wch: 20 }, { wch: 20 }];
+      wsProduct['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 30 }];
+
+      XLSX.utils.book_append_sheet(wb, wsBuman, "부문등록");
+      XLSX.utils.book_append_sheet(wb, wsProduct, "부문별제품");
+
+      const fileName = hasBumans
+        ? `${systemName || '품평회'}_부문_제품_등록데이터.xlsx`
+        : "품평회_부문_제품_등록양식.xlsx";
+
+      XLSX.writeFile(wb, fileName);
+      showToast(hasBumans ? '현재 등록된 부문/제품 데이터가 엑셀로 다운로드되었습니다.' : '엑셀 양식 샘플 파일이 다운로드되었습니다.');
+    } catch (e) {
+      console.error('엑셀 다운로드 오류:', e);
+      alert('엑셀 다운로드 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 엑셀 파일 선택 및 파싱 로직 (유효성 검사 강화)
+  const handleExcelFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExcelFileName(file.name);
+    setExcelErrorMsg('');
+    setExcelParsedData(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        let parsedBumans = [];
+        let parsedProducts = {};
+        let validationErrors = [];
+
+        // 1. 부문등록 시트 파싱 및 유효성 검사
+        const bumanSheetName = workbook.SheetNames.find(n => n.includes('부문')) || workbook.SheetNames[0];
+        if (bumanSheetName) {
+          const wsBuman = workbook.Sheets[bumanSheetName];
+          const rawBumanRows = XLSX.utils.sheet_to_json(wsBuman);
+
+          rawBumanRows.forEach((row, idx) => {
+            const rowNum = idx + 2;
+            const prefix = String(row['부문코드'] || row['코드'] || row['prefix'] || '').trim();
+            
+            // '평가방식'으로 시작하는 헤더 키 자동 탐색 (설명문구 포함 헤더 완벽 호환)
+            const evalKey = Object.keys(row).find(k => k.startsWith('평가방식')) || '평가방식';
+            const rawType = String(row[evalKey] || row['타입'] || row['type'] || '').trim();
+            
+            const group = String(row['부문그룹'] || row['그룹'] || row['group'] || '').trim();
+            const name = String(row['부문명'] || row['이름'] || row['name'] || '').trim();
+
+            if (!prefix && !name) return; // 빈 행 무시
+
+            // 검증 1: 부문코드 필수
+            if (!prefix) {
+              validationErrors.push(`[부문등록 시트 ${rowNum}행] 부문코드가 누락되었습니다.`);
+              return;
+            }
+
+            // 검증 2: 평가방식 유효성 (오픈 / 블라인드 / open / blind)
+            let type = 'open';
+            const normType = rawType.toLowerCase();
+            if (normType === '블라인드' || normType === 'blind') {
+              type = 'blind';
+            } else if (normType === '오픈' || normType === 'open' || normType === '') {
+              type = 'open';
+            } else {
+              validationErrors.push(`[부문등록 시트 ${rowNum}행] '${prefix}' 부문의 평가방식('${rawType}')이 올바르지 않습니다. ('오픈' 또는 '블라인드'만 입력 가능)`);
+            }
+
+            parsedBumans.push({
+              id: idx + 1001,
+              prefix,
+              cat: type,
+              type,
+              group,
+              name: name || prefix
+            });
+          });
+        }
+
+        // 2. 부문별제품 시트 파싱 및 유효성 검사
+        const productSheetName = workbook.SheetNames.find(n => n.includes('제품') || n.includes('품목')) || workbook.SheetNames[1];
+        if (productSheetName) {
+          const wsProduct = workbook.Sheets[productSheetName];
+          const rawProductRows = XLSX.utils.sheet_to_json(wsProduct);
+          const validPrefixes = new Set(parsedBumans.map(b => b.prefix));
+
+          rawProductRows.forEach((row, idx) => {
+            const rowNum = idx + 2;
+            const prefix = String(row['부문코드'] || row['부문'] || row['prefix'] || '').trim();
+            const code = String(row['제품 분류코드'] || row['제품코드'] || row['분류코드'] || row['code'] || '').trim();
+            const name = String(row['제품명'] || row['이름'] || row['name'] || '').trim();
+
+            if (!prefix && !code && !name) return; // 빈 행 무시
+
+            if (!prefix) {
+              validationErrors.push(`[부문별제품 시트 ${rowNum}행] 제품 '${code || name}'의 부문코드가 누락되었습니다.`);
+              return;
+            }
+
+            // 검증 3: 제품의 부문코드가 부문목록에 존재해야 함
+            if (validPrefixes.size > 0 && !validPrefixes.has(prefix)) {
+              validationErrors.push(`[부문별제품 시트 ${rowNum}행] 제품 '${code || name}'의 부문코드('${prefix}')는 '부문등록' 시트에 존재하지 않는 부문코드입니다.`);
+            }
+
+            if (!parsedProducts[prefix]) {
+              parsedProducts[prefix] = [];
+            }
+            parsedProducts[prefix].push({
+              id: idx + 2001,
+              code: code || `${prefix}-${parsedProducts[prefix].length + 1}`,
+              name
+            });
+          });
+        }
+
+        // 검증 에러 발생 시 처리 (일괄 반영 버튼 비활성화)
+        if (validationErrors.length > 0) {
+          setExcelErrorMsg("❌ 엑셀 검증 오류:\n" + validationErrors.join("\n"));
+          return;
+        }
+
+        if (parsedBumans.length === 0 && Object.keys(parsedProducts).length === 0) {
+          setExcelErrorMsg('엑셀 파일에서 유효한 부문 및 제품 데이터를 찾을 수 없습니다. 서식을 확인해 주세요.');
+          return;
+        }
+
+        const totalProductCount = Object.values(parsedProducts).reduce((acc, list) => acc + (list || []).length, 0);
+
+        setExcelParsedData({
+          bumans: parsedBumans,
+          products: parsedProducts,
+          bumanCount: parsedBumans.length,
+          productCount: totalProductCount
+        });
+      } catch (err) {
+        console.error('엑셀 파싱 에러:', err);
+        setExcelErrorMsg('엑셀 파싱 중 오류가 발생했습니다. 올바른 .xlsx 파일인지 확인해 주세요.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // 엑셀 파싱 결과 화면 State 일괄 적용
+  const handleApplyExcelData = () => {
+    if (!excelParsedData) return;
+
+    setBumans(excelParsedData.bumans);
+    setProducts(excelParsedData.products);
+
+    if (excelParsedData.bumans.length > 0) {
+      setProductBuman(excelParsedData.bumans[0].prefix);
+    }
+
+    setShowExcelUploadModal(false);
+    setExcelParsedData(null);
+    setExcelFileName('');
+    setExcelErrorMsg('');
+    showToast('엑셀 데이터가 화면 목록에 일괄 반영되었습니다. [변경사항 저장] 버튼을 누르면 DB에 저장됩니다.');
   };
 
   // 이탈 가드: 변경 사항 감지 및 컨펌/복원 수행
@@ -1930,6 +2150,38 @@ function App() {
           {/* 3) 부문 등록 (bumans) */}
           {section === 'bumans' && (
             <div className="space-y-4">
+              <div className="flex items-center justify-between max-w-[980px]">
+                <div className="text-[14px] text-[#8b97ab] font-bold">
+                  부문 목록 설정 및 카테고리 관리
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDownloadExcelSample}
+                    className="flex items-center gap-1.5 h-[38px] px-3.5 bg-[#107c41] text-white rounded-lg text-[13px] font-bold cursor-pointer hover:bg-[#0b6433] transition-all shadow-sm"
+                    title="엑셀 일괄 등록용 양식/데이터 다운로드"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    엑셀 다운로드
+                  </button>
+                  <button
+                    onClick={() => setShowExcelUploadModal(true)}
+                    className="flex items-center gap-1.5 h-[38px] px-3.5 bg-[#1b2a4a] text-white rounded-lg text-[13px] font-bold cursor-pointer hover:bg-[#2c3e66] transition-all shadow-sm"
+                    title="엑셀 파일 일괄 등록"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    엑셀 파일 업로드
+                  </button>
+                </div>
+              </div>
+
               <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[980px] shadow-sm">
                 <div className="grid grid-cols-[56px_90px_110px_1.1fr_1.4fr_120px_80px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
                   <div className="p-3 text-center">No.</div>
@@ -2051,6 +2303,38 @@ function App() {
 
             return (
               <div className="space-y-4">
+                <div className="flex items-center justify-between max-w-[760px]">
+                  <div className="text-[14px] text-[#8b97ab] font-bold">
+                    부문별 품목 및 분류코드 설정
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleDownloadExcelSample}
+                      className="flex items-center gap-1.5 h-[38px] px-3.5 bg-[#107c41] text-white rounded-lg text-[13px] font-bold cursor-pointer hover:bg-[#0b6433] transition-all shadow-sm"
+                      title="엑셀 일괄 등록용 양식/데이터 다운로드"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      엑셀 다운로드
+                    </button>
+                    <button
+                      onClick={() => setShowExcelUploadModal(true)}
+                      className="flex items-center gap-1.5 h-[38px] px-3.5 bg-[#1b2a4a] text-white rounded-lg text-[13px] font-bold cursor-pointer hover:bg-[#2c3e66] transition-all shadow-sm"
+                      title="엑셀 파일 일괄 등록"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                      엑셀 파일 업로드
+                    </button>
+                  </div>
+                </div>
+
                 {/* 상단 부문 전환 탭 */}
                 <div className="flex gap-2 flex-wrap">
                   {bumans.filter(b => b.prefix).map((b) => {
@@ -3286,6 +3570,131 @@ function App() {
         </div>
 
       </div>
+
+      {/* 엑셀 일괄 등록 모달 팝업 */}
+      {showExcelUploadModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#dde3ec] w-full max-w-[640px] overflow-hidden flex flex-col max-h-[90vh]">
+            {/* 모달 헤더 */}
+            <div className="bg-[#1b2a4a] text-white p-5 px-6 flex items-center justify-between">
+              <div>
+                <div className="text-[18px] font-extrabold flex items-center gap-2">
+                  <span>📊</span> 엑셀 일괄 등록
+                </div>
+                <div className="text-[12px] text-white/70 mt-0.5 font-medium">
+                  부문 목록 및 부문별 제품을 엑셀 파일로 한번에 등록합니다.
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowExcelUploadModal(false);
+                  setExcelParsedData(null);
+                  setExcelFileName('');
+                  setExcelErrorMsg('');
+                }}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[20px] font-extrabold flex items-center justify-center cursor-pointer transition-all"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 모달 본문 */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1">
+              {/* 경고 및 안내 박스 (사용자 요청 문구 반영) */}
+              <div className="bg-[#fff8e6] border border-[#f5d089] rounded-xl p-4 flex items-start gap-3">
+                <div className="text-[20px] leading-none">⚠️</div>
+                <div className="text-[13px] text-[#8a5700] leading-relaxed">
+                  <strong className="font-extrabold text-[#704200] block mb-0.5">주의사항 안내</strong>
+                  부문과 제품은 엑셀데이터 기준으로 초기화 됩니다.
+                </div>
+              </div>
+
+              {/* 엑셀 파일 선택 구역 */}
+              <div>
+                <label className="text-[13px] font-extrabold text-[#1b2a4a] block mb-2">
+                  엑셀 파일 업로드 (.xlsx)
+                </label>
+                <div className="border-2 border-dashed border-[#cbd5e1] hover:border-primary/50 bg-[#f8fafc] hover:bg-[#f1f5f9] rounded-xl p-6 text-center cursor-pointer transition-all relative">
+                  <input
+                    type="file"
+                    accept=".xlsx, .xls"
+                    onChange={handleExcelFileSelect}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                  <div className="text-[32px] mb-1">📁</div>
+                  <div className="text-[14px] font-bold text-[#334155]">
+                    {excelFileName ? excelFileName : "클릭하거나 엑셀 파일을 드래그하여 올려주세요"}
+                  </div>
+                  <div className="text-[12px] text-[#64748b] mt-1 font-medium">
+                    지원 확장자: .xlsx, .xls (샘플 다운로드 양식 권장)
+                  </div>
+                </div>
+              </div>
+
+              {/* 에러 메시지 */}
+              {excelErrorMsg && (
+                <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-[13px] font-bold">
+                  {excelErrorMsg}
+                </div>
+              )}
+
+              {/* 파싱 결과 미리보기 */}
+              {excelParsedData && (
+                <div className="space-y-3 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[14px] font-extrabold text-[#1b2a4a]">
+                      🔍 파싱 데이터 감지 결과
+                    </span>
+                    <span className="text-[12px] font-bold bg-[#eef4fb] text-[#2f5488] border border-[#c6d6ee] py-1 px-3 rounded-full">
+                      부문 {excelParsedData.bumanCount}개 / 제품 {excelParsedData.productCount}개
+                    </span>
+                  </div>
+
+                  {/* 부문 감지 요약 */}
+                  {excelParsedData.bumans.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[12px] font-bold text-[#64748b]">감지된 부문 목록:</div>
+                      <div className="flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto pr-1">
+                        {excelParsedData.bumans.map((b, i) => (
+                          <span key={i} className="text-[12px] py-1 px-2.5 bg-white border border-[#cbd5e1] rounded-md font-extrabold text-[#1e293b]">
+                            [{b.prefix}] {b.name} ({b.type === 'blind' ? '블라인드' : '오픈'})
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 모달 푸터 */}
+            <div className="bg-[#f8fafc] border-t border-[#e2e8f0] p-4 px-6 flex justify-end gap-2.5 shrink-0">
+              <button
+                onClick={() => {
+                  setShowExcelUploadModal(false);
+                  setExcelParsedData(null);
+                  setExcelFileName('');
+                  setExcelErrorMsg('');
+                }}
+                className="h-11 px-5 rounded-xl border border-gray-300 bg-white text-[14px] font-bold text-[#475569] hover:bg-gray-50 cursor-pointer transition-all"
+              >
+                취소
+              </button>
+              <button
+                disabled={!excelParsedData}
+                onClick={handleApplyExcelData}
+                className={`h-11 px-6 rounded-xl text-[14px] font-extrabold text-white cursor-pointer transition-all shadow-sm ${
+                  excelParsedData
+                    ? 'bg-[#1b2a4a] hover:bg-[#2c3e66]'
+                    : 'bg-gray-300 cursor-not-allowed'
+                }`}
+              >
+                목록에 일괄 반영하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 공통 토스트 안내 */}
       {toast && (

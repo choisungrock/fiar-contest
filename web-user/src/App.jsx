@@ -213,6 +213,8 @@ function App() {
             return;
           }
         }
+        if (rdata.systemName) setSystemName(rdata.systemName);
+        if (rdata.period) setPeriod(rdata.period);
         setDeviceStatus(rdata.status);
         if (rdata.status === 'approved' && rdata.authKey) {
           setAuthKey(rdata.authKey);
@@ -472,6 +474,8 @@ function App() {
         alert(rdata.detail || '기기 등록에 실패했습니다.');
         return;
       }
+      if (rdata.systemName) setSystemName(rdata.systemName);
+      if (rdata.period) setPeriod(rdata.period);
       setDeviceStatus(rdata.status);
       await saveSession(groupName, { deviceLabel: label, deviceStatus: rdata.status });
       if (rdata.status === 'approved') {
@@ -691,7 +695,9 @@ function App() {
     return (
       <div className="w-screen h-screen flex items-center justify-center bg-[#eef1f6] px-6">
         <div className="w-full max-w-[460px] bg-white rounded-[20px] shadow-[0_20px_60px_rgba(27,42,74,0.12)] p-[36px]">
-          <div className="text-[13px] tracking-[2px] text-[#d9b866] font-bold">DEVICE AUTH</div>
+          <div className="text-[13px] tracking-[2px] text-[#d9b866] font-bold truncate" title={systemName}>
+            {systemName || "DEVICE AUTH"}
+          </div>
           <h2 className="mt-[10px] text-[22px] font-extrabold text-[#1b2a4a]">기기 인증이 필요합니다</h2>
           <p className="mt-[12px] text-[15px] text-[#5a6a82] leading-[1.6]">{msg}</p>
           {canRegister && (

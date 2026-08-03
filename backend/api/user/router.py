@@ -54,12 +54,12 @@ def register_device(group_name: str, req: DeviceRegisterRequest):
     try:
         with engine.connect() as conn:
             g = conn.execute(
-                text("SELECT fg_id, fg_enroll_open FROM fair_group WHERE fg_code = :c"),
+                text("SELECT fg_id, fg_enroll_open, fg_name, fg_period FROM fair_group WHERE fg_code = :c"),
                 {"c": group_name}
             ).first()
             if not g:
                 raise HTTPException(status_code=404, detail="대회 정보가 존재하지 않습니다.")
-            fg_id, enroll_open = g[0], g[1]
+            fg_id, enroll_open, fg_name, fg_period = g[0], g[1], g[2], g[3]
 
             existing = conn.execute(
                 text("SELECT fd_status, fd_auth_key, fd_label FROM fair_device WHERE fd_fg_id = :fg AND fd_device_key = :dk"),
@@ -80,17 +80,17 @@ def register_device(group_name: str, req: DeviceRegisterRequest):
                         {"fg": fg_id, "dk": req.deviceKey}
                     )
                 conn.commit()
-                return {"status": d_status, "authKey": d_auth if d_status == 'approved' else None, "label": d_label or ""}
+                return {"status": d_status, "authKey": d_auth if d_status == 'approved' else None, "label": d_label or "", "systemName": fg_name or "", "period": fg_period or ""}
 
             # 신규 기기 — 등록잠금이면 저장하지 않음
             if not enroll_open:
-                return {"status": "rejected", "authKey": None, "label": ""}
+                return {"status": "rejected", "authKey": None, "label": "", "systemName": fg_name or "", "period": fg_period or ""}
             conn.execute(
                 text("INSERT INTO fair_device (fd_fg_id, fd_device_key, fd_label, fd_status) VALUES (:fg, :dk, :lb, 'pending')"),
                 {"fg": fg_id, "dk": req.deviceKey, "lb": req.label or ""}
             )
             conn.commit()
-            return {"status": "pending", "authKey": None, "label": req.label or ""}
+            return {"status": "pending", "authKey": None, "label": req.label or "", "systemName": fg_name or "", "period": fg_period or ""}
     except HTTPException:
         raise
     except Exception as e:
@@ -102,24 +102,24 @@ def check_device_status(group_name: str, req: DeviceKeyRequest):
     """등록된 기기면 상태(및 승인 시 인증키)를 반환, 미등록이면 저장 없이 unregistered 반환."""
     try:
         with engine.connect() as conn:
-            g = conn.execute(text("SELECT fg_id FROM fair_group WHERE fg_code = :c"), {"c": group_name}).first()
+            g = conn.execute(text("SELECT fg_id, fg_name, fg_period FROM fair_group WHERE fg_code = :c"), {"c": group_name}).first()
             if not g:
                 raise HTTPException(status_code=404, detail="대회 정보가 존재하지 않습니다.")
-            fg_id = g[0]
+            fg_id, fg_name, fg_period = g[0], g[1], g[2]
             row = conn.execute(
                 text("SELECT fd_status, fd_auth_key, fd_label FROM fair_device WHERE fd_fg_id = :fg AND fd_device_key = :dk"),
                 {"fg": fg_id, "dk": req.deviceKey}
             ).first()
             if not row:
                 # 저장하지 않고 미등록으로 응답
-                return {"status": "unregistered", "authKey": None, "label": ""}
+                return {"status": "unregistered", "authKey": None, "label": "", "systemName": fg_name or "", "period": fg_period or ""}
             d_status, d_auth, d_label = row
             conn.execute(
                 text("UPDATE fair_device SET fd_last_seen = CURRENT_TIMESTAMP WHERE fd_fg_id = :fg AND fd_device_key = :dk"),
                 {"fg": fg_id, "dk": req.deviceKey}
             )
             conn.commit()
-            return {"status": d_status, "authKey": d_auth if d_status == 'approved' else None, "label": d_label or ""}
+            return {"status": d_status, "authKey": d_auth if d_status == 'approved' else None, "label": d_label or "", "systemName": fg_name or "", "period": fg_period or ""}
     except HTTPException:
         raise
     except Exception as e:

@@ -126,9 +126,36 @@ except Exception as _e:
 
 class CreateGroupRequest(BaseModel):
     name: str
-    period: str
-    status: str
-    code: str
+    period: Optional[str] = ""
+    status: Optional[str] = "준비중"
+    code: Optional[str] = None
+
+@router.post("/groups")
+def create_group(req: CreateGroupRequest):
+    """새 대그룹(품평회 대회) 추가 API"""
+    try:
+        group_code = req.code
+        if not group_code or not group_code.strip():
+            import time
+            group_code = f"fair_{int(time.time())}"
+
+        with engine.connect() as conn:
+            trans = conn.begin()
+            try:
+                conn.execute(
+                    text("INSERT INTO fair_group (fg_name, fg_period, fg_status, fg_code) VALUES (:name, :period, :status, :code)"),
+                    {"name": req.name, "period": req.period or "", "status": req.status or "준비중", "code": group_code}
+                )
+                trans.commit()
+                return {
+                    "status": "success",
+                    "message": "새 대그룹이 정상적으로 추가되었습니다."
+                }
+            except Exception as insert_err:
+                trans.rollback()
+                raise insert_err
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"대그룹 추가 중 오류 발생: {str(e)}")
 
 @router.get("/groups")
 def get_groups(x_admin_username: Optional[str] = Header(None)):
@@ -243,28 +270,6 @@ def get_groups(x_admin_username: Optional[str] = Header(None)):
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"대그룹 조회 중 오류 발생: {str(e)}")
-
-@router.post("/groups")
-def create_group(req: CreateGroupRequest):
-    """새 대그룹(품평회 대회) 추가 API"""
-    try:
-        with engine.connect() as conn:
-            trans = conn.begin()
-            try:
-                conn.execute(
-                    text("INSERT INTO fair_group (fg_name, fg_period, fg_status, fg_code) VALUES (:name, :period, :status, :code)"),
-                    {"name": req.name, "period": req.period, "status": req.status, "code": req.code}
-                )
-                trans.commit()
-                return {
-                    "status": "success",
-                    "message": "새 대그룹이 정상적으로 추가되었습니다."
-                }
-            except Exception as insert_err:
-                trans.rollback()
-                raise insert_err
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"대그룹 추가 중 오류 발생: {str(e)}")
 
 class JudgeItem(BaseModel):
     id: int = None
