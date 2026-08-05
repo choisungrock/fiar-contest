@@ -132,7 +132,7 @@ def init_db_schema():
     if not engine:
         return
     try:
-        with engine.connect() as conn:
+        with engine.begin() as conn:
             # 1. fair_judge_buman 매핑 테이블 자동 생성
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS fair_judge_buman (
@@ -145,7 +145,7 @@ def init_db_schema():
                 ) ENGINE=InnoDB;
             """))
 
-            # 2. fair_score_record 컬럼 타입 VARCHAR(50) 지원 변경 (문자열/숫자 항목 ID 모두 수용)
+            # 2. fair_score_record 컬럼 타입 VARCHAR(50) 지원 변경
             try:
                 conn.execute(text("ALTER TABLE fair_score_record DROP FOREIGN KEY fair_score_record_ibfk_3;"))
             except Exception:
@@ -155,21 +155,24 @@ def init_db_schema():
             except Exception as alter_ex:
                 print(f"fsr_fei_id ALTER NOTICE: {alter_ex}")
 
+            # 3. 기존 DB 운영 환경인 경우: 매핑 정보가 없으면 기존 심사위원들을 백필 매핑
+            try:
+                check_count = conn.execute(text("SELECT COUNT(*) FROM fair_judge_buman")).scalar() or 0
+                if check_count == 0:
+                    conn.execute(text("""
+                        INSERT IGNORE INTO fair_judge_buman (fjb_fb_id, fjb_fj_id)
+                        SELECT b.fb_id, j.fj_id
+                        FROM fair_buman b
+                        JOIN fair_judge j ON b.fb_fg_id = j.fj_fg_id
+                    """))
+            except Exception as b_ex:
+                print(f"backfill NOTICE: {b_ex}")
 
-            # 3. 기존 DB 운영 환경인 경우: 매핑 정보가 없으면 기존 심사위원들을 기본적으로 전체 부문에 백필 매핑
-            check_count = conn.execute(text("SELECT COUNT(*) FROM fair_judge_buman")).scalar() or 0
-            if check_count == 0:
-                conn.execute(text("""
-                    INSERT IGNORE INTO fair_judge_buman (fjb_fb_id, fjb_fj_id)
-                    SELECT b.fb_id, j.fj_id
-                    FROM fair_buman b
-                    JOIN fair_judge j ON b.fb_fg_id = j.fj_fg_id
-                """))
-            conn.commit()
             print("✅ [DB Schema Init] fair_judge_buman 테이블 스키마 및 초기 마이그레이션이 완료되었습니다.")
 
     except Exception as ex:
         print(f"⚠️ [DB Schema Init Error] 스키마 마이그레이션 중 오류 (기존 DB 상태에 따라 무시 가능): {ex}")
+
 
 @app.on_event("startup")
 def on_startup():

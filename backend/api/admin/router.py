@@ -378,14 +378,18 @@ def get_group_details(fg_id: int, x_admin_username: Optional[str] = Header(None)
                 {"fg_id": fg_id}
             )
             # 해당 대그룹의 부문-평가자 매핑 정보가 DB에 한 번이라도 저장이 이루어졌는지 확인
-            has_any_mapping = conn.execute(
-                text("""
-                    SELECT COUNT(*) FROM fair_judge_buman fjb
-                    JOIN fair_buman b ON fjb.fjb_fb_id = b.fb_id
-                    WHERE b.fb_fg_id = :fg_id
-                """),
-                {"fg_id": fg_id}
-            ).scalar() or 0
+            has_any_mapping = 0
+            try:
+                has_any_mapping = conn.execute(
+                    text("""
+                        SELECT COUNT(*) FROM fair_judge_buman fjb
+                        JOIN fair_buman b ON fjb.fjb_fb_id = b.fb_id
+                        WHERE b.fb_fg_id = :fg_id
+                    """),
+                    {"fg_id": fg_id}
+                ).scalar() or 0
+            except Exception:
+                has_any_mapping = 0
 
             bumans_list = []
             buman_ids = {}
@@ -393,16 +397,22 @@ def get_group_details(fg_id: int, x_admin_username: Optional[str] = Header(None)
             for r in res_bumans:
 
                 fb_id = r[0]
-                assigned_j_rows = conn.execute(
-                    text("SELECT fjb_fj_id FROM fair_judge_buman WHERE fjb_fb_id = :fb_id"),
-                    {"fb_id": fb_id}
-                ).all()
+                assigned_j_rows = []
+                try:
+                    assigned_j_rows = conn.execute(
+                        text("SELECT fjb_fj_id FROM fair_judge_buman WHERE fjb_fb_id = :fb_id"),
+                        {"fb_id": fb_id}
+                    ).all()
+                except Exception:
+                    assigned_j_rows = []
+
                 if assigned_j_rows:
                     b_jids = [row[0] for row in assigned_j_rows]
                 elif has_any_mapping > 0:
                     b_jids = []
                 else:
                     b_jids = list(all_judge_ids)
+
 
 
                 bumans_list.append({
