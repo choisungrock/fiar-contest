@@ -284,6 +284,8 @@ class BumanItem(BaseModel):
     name: str
     type: str = "open"
     cat: str = "open"
+    judgeIds: Optional[list[int]] = None
+
 
 class ProductItem(BaseModel):
     id: int = None
@@ -375,18 +377,45 @@ def get_group_details(fg_id: int, x_admin_username: Optional[str] = Header(None)
                 text("SELECT fb_id, fb_prefix, fb_group, fb_name, fb_type FROM fair_buman WHERE fb_fg_id = :fg_id ORDER BY fb_id ASC"),
                 {"fg_id": fg_id}
             )
+            # 해당 대그룹의 부문-평가자 매핑 정보가 DB에 한 번이라도 저장이 이루어졌는지 확인
+            has_any_mapping = conn.execute(
+                text("""
+                    SELECT COUNT(*) FROM fair_judge_buman fjb
+                    JOIN fair_buman b ON fjb.fjb_fb_id = b.fb_id
+                    WHERE b.fb_fg_id = :fg_id
+                """),
+                {"fg_id": fg_id}
+            ).scalar() or 0
+
             bumans_list = []
             buman_ids = {}
+            all_judge_ids = [j["id"] for j in judges_list]
             for r in res_bumans:
+
+                fb_id = r[0]
+                assigned_j_rows = conn.execute(
+                    text("SELECT fjb_fj_id FROM fair_judge_buman WHERE fjb_fb_id = :fb_id"),
+                    {"fb_id": fb_id}
+                ).all()
+                if assigned_j_rows:
+                    b_jids = [row[0] for row in assigned_j_rows]
+                elif has_any_mapping > 0:
+                    b_jids = []
+                else:
+                    b_jids = list(all_judge_ids)
+
+
                 bumans_list.append({
-                    "id": r[0],
+                    "id": fb_id,
                     "prefix": r[1],
                     "group": r[2] or "",
                     "name": r[3],
                     "type": r[4],
-                    "cat": r[4]
+                    "cat": r[4],
+                    "judgeIds": b_jids
                 })
-                buman_ids[r[1]] = r[0]
+                buman_ids[r[1]] = fb_id
+
 
             # 부문별 제품
             products_map = {}
@@ -529,18 +558,51 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest, x_admin_username: Op
                     {"name": req.systemName, "period": req.period, "status": req.status, "code": req.systemCode, "fg_id": fg_id}
                 )
 
-                # 2. 기존 종속 관계 데이터 삭제
-                conn.execute(text("DELETE FROM fair_judge WHERE fj_fg_id = :fg_id"), {"fg_id": fg_id})
+                # 2. 기존 부문 관계 데이터 및 매핑 데이터 삭제
                 conn.execute(text("DELETE FROM fair_buman WHERE fb_fg_id = :fg_id"), {"fg_id": fg_id})
 
-                # 3. 심사위원 기입
-                for j in req.judges:
-                    conn.execute(
-                        text("INSERT INTO fair_judge (fj_fg_id, fj_name, fj_affiliation, fj_role) VALUES (:fg_id, :name, :aff, :role)"),
-                        {"fg_id": fg_id, "name": j.name, "aff": j.affiliation, "role": j.role}
-                    )
+                # 3. 심사위원 기입 (기존 평가 점수 보존을 위해 ID가 존재하는 기존 심사위원은 UPDATE, 신주는 INSERT)
+                existing_j_rows = conn.execute(
+                    text("SELECT fj_id FROM fair_judge WHERE fj_fg_id = :fg_id"),
+                    {"fg_id": fg_id}
+                ).all()
+                existing_j_ids = {row[0] for row in existing_j_rows}
 
-                # 4. 부문 기입
+                incoming_j_ids = set()
+                judge_id_map = {} # req.judges 의 id 또는 index -> DB fj_id
+
+                for j in req.judges:
+                    if j.id and j.id in existing_j_ids:
+                        conn.execute(
+                            text("UPDATE fair_judge SET fj_name = :name, fj_affiliation = :aff, fj_role = :role WHERE fj_id = :jid"),
+                            {"name": j.name, "aff": j.affiliation, "role": j.role, "jid": j.id}
+                        )
+                        incoming_j_ids.add(j.id)
+                        judge_id_map[j.id] = j.id
+                    else:
+                        conn.execute(
+                            text("INSERT INTO fair_judge (fj_fg_id, fj_name, fj_affiliation, fj_role) VALUES (:fg_id, :name, :aff, :role)"),
+                            {"fg_id": fg_id, "name": j.name, "aff": j.affiliation, "role": j.role}
+                        )
+                        new_jid = conn.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+                        incoming_j_ids.add(new_jid)
+                        if j.id:
+                            judge_id_map[j.id] = new_jid
+
+                # 점수가 없는 삭제 대상 심사위원만 정리
+                to_delete_jids = existing_j_ids - incoming_j_ids
+                for del_jid in to_delete_jids:
+                    # 점수가 없는 경우만 안전하게 삭제
+                    has_score = conn.execute(
+                        text("SELECT COUNT(*) FROM fair_score_record WHERE fsr_fj_id = :jid"),
+                        {"jid": del_jid}
+                    ).scalar() or 0
+                    if has_score == 0:
+                        conn.execute(text("DELETE FROM fair_judge WHERE fj_id = :jid"), {"jid": del_jid})
+
+                all_active_jids = list(incoming_j_ids)
+
+                # 4. 부문 및 부문-평가자 매핑 기입
                 prefix_to_fb_id = {}
                 for b in req.bumans:
                     b_type = b.type if b.type else (b.cat if b.cat else "open")
@@ -552,6 +614,23 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest, x_admin_username: Op
                     inserted_fb_id = conn.execute(text("SELECT LAST_INSERT_ID()")).scalar()
                     prefix_to_fb_id[b.prefix] = inserted_fb_id
 
+                    # 부문-평가자 매핑 저장
+                    target_jids = []
+                    if b.judgeIds is not None:
+                        for jid in b.judgeIds:
+                            real_jid = judge_id_map.get(jid, jid)
+                            if real_jid in all_active_jids:
+                                target_jids.append(real_jid)
+                    else:
+                        target_jids = all_active_jids
+
+
+                    for jid in target_jids:
+                        conn.execute(
+                            text("INSERT IGNORE INTO fair_judge_buman (fjb_fb_id, fjb_fj_id) VALUES (:fb_id, :fj_id)"),
+                            {"fb_id": inserted_fb_id, "fj_id": jid}
+                        )
+
                 # 5. 제품 기입
                 for prefix, prod_list in req.products.items():
                     fb_id = prefix_to_fb_id.get(prefix)
@@ -561,6 +640,7 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest, x_admin_username: Op
                                 text("INSERT INTO fair_product (fp_fb_id, fp_code, fp_name) VALUES (:fb_id, :code, :name)"),
                                 {"fb_id": fb_id, "code": p.code, "name": p.name}
                             )
+
 
                 # 6. 기존 평가 템플릿 삭제 (종속 항목인 fair_evaluation_item은 ON DELETE CASCADE에 의해 같이 삭제됨)
                 conn.execute(text("DELETE FROM fair_evaluation_template WHERE fet_fg_id = :fg_id"), {"fg_id": fg_id})

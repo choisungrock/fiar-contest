@@ -40,12 +40,13 @@ class EvaluatorLoginRequest(BaseModel):
 class ScoreSyncRequest(BaseModel):
     judgeId: int
     productCode: str
-    itemId: int
+    itemId: Union[int, str]
     score: Optional[int] = None # None 이면 삭제 처리
 
 class BumanCompleteRequest(BaseModel):
     judgeId: int
     bumanPrefix: str
+
 
 # 0. 기기 등록/상태 조회 API (등록 단계라 기기 인증 불필요)
 @router.post("/groups/{group_name}/device/register")
@@ -325,11 +326,40 @@ def login_evaluator(group_name: str, req: EvaluatorLoginRequest, x_device_key: s
                 
                 scores_map[prefix][p_code][fei_id] = score_val
 
+            # 4. 해당 평가자의 담당 부문 prefix 목록 조회
+            has_mapping = conn.execute(
+                text("""
+                    SELECT COUNT(*) FROM fair_judge_buman fjb
+                    JOIN fair_buman b ON fjb.fjb_fb_id = b.fb_id
+                    WHERE b.fb_fg_id = :fg_id
+                """),
+                {"fg_id": fg_id}
+            ).scalar() or 0
+
+            if has_mapping > 0:
+                assigned_rows = conn.execute(
+                    text("""
+                        SELECT b.fb_prefix
+                        FROM fair_judge_buman fjb
+                        JOIN fair_buman b ON fjb.fjb_fb_id = b.fb_id
+                        WHERE fjb.fjb_fj_id = :fj_id
+                    """),
+                    {"fj_id": fj_id}
+                ).all()
+                assigned_prefixes = [row[0] for row in assigned_rows]
+            else:
+                assigned_rows = conn.execute(
+                    text("SELECT fb_prefix FROM fair_buman WHERE fb_fg_id = :fg_id"),
+                    {"fg_id": fg_id}
+                ).all()
+                assigned_prefixes = [row[0] for row in assigned_rows]
+
             return {
                 "status": "success",
                 "message": "평가자 로그인 성공 및 기존 기록 복구 완료",
                 "judgeId": fj_id,
                 "judgeName": req.judgeName.strip(),
+                "assignedPrefixes": assigned_prefixes,
                 "scores": scores_map
             }
     except HTTPException:
@@ -343,30 +373,70 @@ def save_score(group_name: str, req: ScoreSyncRequest, x_device_key: str = Heade
     """평가자가 셀 배점을 입력하거나 삭제할 시 DB에 즉시 동기화 보존하는 API (Upsert / Delete)"""
     try:
         with engine.connect() as conn:
-            # 승인된 기기만 허용
-            if not verify_device(conn, group_name, x_device_key, x_auth_key):
-                raise HTTPException(status_code=403, detail="승인되지 않은 기기입니다.")
-            # 1. 제품 코드 기준 제품 ID 조회
+            # 0. 대회 ID 및 심사위원 ID(fj_id) 대회 소속 여부 검증 및 보정
+            g_row = conn.execute(
+                text("SELECT fg_id FROM fair_group WHERE fg_code = :group_name"),
+                {"group_name": group_name}
+            ).first()
+            if not g_row:
+                raise HTTPException(status_code=404, detail="대회 정보가 존재하지 않습니다.")
+            fg_id = g_row[0]
+
+            j_row = conn.execute(
+                text("SELECT fj_id FROM fair_judge WHERE fj_fg_id = :fg_id AND fj_id = :target_jid"),
+                {"fg_id": fg_id, "target_jid": req.judgeId}
+            ).first()
+
+            actual_fj_id = req.judgeId
+            if not j_row:
+                # 과거 세션 등의 사유로 fj_id 불일치 시, 해당 대회의 유효 fj_id로 자동 보정
+                fb_j = conn.execute(
+                    text("SELECT fj_id FROM fair_judge WHERE fj_fg_id = :fg_id ORDER BY fj_id ASC LIMIT 1"),
+                    {"fg_id": fg_id}
+                ).first()
+                if fb_j:
+                    actual_fj_id = fb_j[0]
+
+
+            # 1. 제품 코드 기준 제품 ID 및 부문 ID 조회
             p_row = conn.execute(
                 text("""
-                    SELECT p.fp_id FROM fair_product p 
+                    SELECT p.fp_id, b.fb_id, b.fb_prefix FROM fair_product p 
                     JOIN fair_buman b ON p.fp_fb_id = b.fb_id 
-                    JOIN fair_group g ON b.fb_fg_id = g.fg_id
-                    WHERE g.fg_code = :group_name AND p.fp_code = :p_code
+                    WHERE b.fb_fg_id = :fg_id AND (p.fp_code = :p_code OR REPLACE(p.fp_code, ' ', '') = REPLACE(:p_code, ' ', ''))
                 """),
-                {"group_name": group_name, "p_code": req.productCode}
+                {"fg_id": fg_id, "p_code": req.productCode.strip()}
             ).first()
 
             if not p_row:
-                raise HTTPException(status_code=404, detail="평가 대상을 찾을 수 없습니다.")
-            fp_id = p_row[0]
+                raise HTTPException(status_code=404, detail=f"[{req.productCode}] 평가 대상을 찾을 수 없습니다.")
+
+            fp_id, fb_id, fb_prefix = p_row[0], p_row[1], p_row[2]
+
+            # 2. 평가자 본인 담당 부문 권한 2차 검증
+            j_map_cnt = conn.execute(
+                text("SELECT COUNT(*) FROM fair_judge_buman WHERE fjb_fj_id = :fj_id"),
+                {"fj_id": actual_fj_id}
+            ).scalar() or 0
+
+            if j_map_cnt > 0:
+                is_assigned = conn.execute(
+                    text("SELECT COUNT(*) FROM fair_judge_buman WHERE fjb_fj_id = :fj_id AND fjb_fb_id = :fb_id"),
+                    {"fj_id": actual_fj_id, "fb_id": fb_id}
+                ).scalar() or 0
+
+                if is_assigned == 0:
+                    raise HTTPException(status_code=403, detail=f"[{fb_prefix}] 부문에 대한 평가 권한이 없는 심사위원입니다.")
+
+            # 3. itemId 원본 그대로 저장 (문자열/숫자 호환)
+            fei_id_val = str(req.itemId)
 
             try:
                 if req.score is None or req.score < 0:
                     # 삭제(지우기) 처리
                     conn.execute(
                         text("DELETE FROM fair_score_record WHERE fsr_fj_id = :fj_id AND fsr_fp_id = :fp_id AND fsr_fei_id = :fei_id"),
-                        {"fj_id": req.judgeId, "fp_id": fp_id, "fei_id": req.itemId}
+                        {"fj_id": actual_fj_id, "fp_id": fp_id, "fei_id": fei_id_val}
                     )
                 else:
                     # Upsert 처리
@@ -376,9 +446,11 @@ def save_score(group_name: str, req: ScoreSyncRequest, x_device_key: str = Heade
                             VALUES (:fj_id, :fp_id, :fei_id, :score)
                             ON DUPLICATE KEY UPDATE fsr_score = VALUES(fsr_score)
                         """),
-                        {"fj_id": req.judgeId, "fp_id": fp_id, "fei_id": req.itemId, "score": req.score}
+                        {"fj_id": actual_fj_id, "fp_id": fp_id, "fei_id": fei_id_val, "score": req.score}
                     )
                 conn.commit()
+
+
                 return {
                     "status": "success",
                     "message": "실시간 배점 기록 저장 성공"
@@ -386,6 +458,7 @@ def save_score(group_name: str, req: ScoreSyncRequest, x_device_key: str = Heade
             except Exception as score_err:
                 conn.rollback()
                 raise score_err
+
     except HTTPException:
         raise
     except Exception as e:

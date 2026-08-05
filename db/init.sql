@@ -34,6 +34,17 @@ CREATE TABLE IF NOT EXISTS fair_judge (
   FOREIGN KEY (fj_fg_id) REFERENCES fair_group(fg_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- 3-1. 평가자-부문 매핑 테이블 (평가자별 담당 부문 다중 지정)
+CREATE TABLE IF NOT EXISTS fair_judge_buman (
+  fjb_id INT AUTO_INCREMENT PRIMARY KEY,
+  fjb_fb_id INT NOT NULL,
+  fjb_fj_id INT NOT NULL,
+  FOREIGN KEY (fjb_fb_id) REFERENCES fair_buman(fb_id) ON DELETE CASCADE,
+  FOREIGN KEY (fjb_fj_id) REFERENCES fair_judge(fj_id) ON DELETE CASCADE,
+  UNIQUE KEY uq_fjb (fjb_fb_id, fjb_fj_id)
+) ENGINE=InnoDB;
+
+
 -- 4. 제품 테이블
 CREATE TABLE IF NOT EXISTS fair_product (
   fp_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -120,6 +131,14 @@ INSERT INTO fair_judge (fj_id, fj_fg_id, fj_name, fj_affiliation, fj_role) VALUE
 (1, 1, '김심사', '한국식품연구원', '심사위원장'),
 (2, 1, '이평가', '농촌진흥청', '심사위원'),
 (3, 1, '박관능', '전통주갤러리', '심사위원');
+
+-- 3-1. 평가자-부문 초기 매핑 (기본적으로 전 부문 배정)
+INSERT INTO fair_judge_buman (fjb_fb_id, fjb_fj_id) VALUES
+(1, 1), (1, 2), (1, 3),
+(2, 1), (2, 2), (2, 3),
+(3, 1), (3, 2), (3, 3),
+(4, 1), (4, 2), (4, 3);
+
 
 -- 4. 제품
 INSERT INTO fair_product (fp_id, fp_fb_id, fp_code, fp_name) VALUES

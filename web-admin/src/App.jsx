@@ -32,6 +32,39 @@ window.fetch = async (input, init) => {
   }
 };
 
+// 평가 항목 기본 정의
+const ITEMS = {
+  ricefood: {
+    label: '쌀가공식품',
+    blind: false,
+    convert: true,
+    gwan: [
+      { key: 'color', name: '식품의 색', max: 15, scale: [3, 6, 9, 12, 15] },
+      { key: 'aroma', name: '식품의 향', max: 15, scale: [3, 6, 9, 12, 15] },
+      { key: 'taste', name: '식품의 맛', max: 30, scale: [6, 12, 18, 24, 30] },
+      { key: 'texture', name: '식품의 식감', max: 20, scale: [4, 8, 12, 16, 20] },
+      { key: 'overall', name: '종합평가', max: 20, scale: [4, 8, 12, 16, 20] },
+    ],
+    sang: [
+      { key: 'creativity', name: '창의성', max: 30, scale: [6, 12, 18, 24, 30] },
+      { key: 'design', name: '디자인', max: 20, scale: [4, 8, 12, 16, 20] },
+    ],
+  },
+  woolisul: {
+    label: '우리술',
+    blind: true,
+    convert: false,
+    gwan: [
+      { key: 'color', name: '술의 색', max: 20, scale: [4, 8, 12, 16, 20] },
+      { key: 'aroma', name: '술의 향', max: 20, scale: [4, 8, 12, 16, 20] },
+      { key: 'taste', name: '술의 맛', max: 30, scale: [6, 12, 18, 24, 30] },
+      { key: 'finish', name: '후미 및 목넘김', max: 20, scale: [4, 8, 12, 16, 20] },
+      { key: 'overall', name: '종합평가', max: 30, scale: [6, 12, 18, 24, 30] },
+    ],
+    sang: [],
+  },
+};
+
 // 공통 네비게이션 명세
 const NAV = [
   { key: 'overview', icon: '▤', label: '시스템 개요' },
@@ -42,6 +75,7 @@ const NAV = [
   { key: 'items', icon: '≡', label: '평가항목 설정' },
   { key: 'results', icon: '★', label: '결과' },
 ];
+
 
 // 한국 표준시(KST, UTC+9) 날짜 포맷팅 헬퍼
 function formatKstDate(dateStr) {
@@ -204,6 +238,8 @@ function App() {
   const [devices, setDevices] = useState([]);
   const [enrollOpen, setEnrollOpen] = useState(true);
   const [actualScores, setActualScores] = useState({});
+  const [selectedBumanForJudge, setSelectedBumanForJudge] = useState(null);
+
 
   useEffect(() => {
     document.title = "품평회 관리자";
@@ -778,11 +814,13 @@ function App() {
       prefix: '',
       group: '',
       cat: 'open',
-      name: ''
+      name: '',
+      judgeIds: []
     }];
     setBumans(newBumans);
     saveState({ bumans: newBumans });
   };
+
 
   // 부문 삭제
   const handleDeleteBuman = (id) => {
@@ -1011,6 +1049,11 @@ function App() {
           headers["X-Admin-Username"] = parsed.username;
         }
       }
+      const sanitizedBumans = bumans.map(b => ({
+        ...b,
+        judgeIds: Array.isArray(b.judgeIds) ? b.judgeIds : (judges || []).map(j => j.id)
+      }));
+
       const response = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/save`, {
         method: "POST",
         headers,
@@ -1020,11 +1063,12 @@ function App() {
           period: nextPeriod,
           status: groups.find(g => g.id === activeGroup)?.status || "준비중",
           judges,
-          bumans,
+          bumans: sanitizedBumans,
           products,
           templates
         })
       });
+
 
       if (response.ok) {
         setDbBackup({
@@ -1183,8 +1227,10 @@ function App() {
               cat: type,
               type,
               group,
-              name: name || prefix
+              name: name || prefix,
+              judgeIds: []
             });
+
           });
         }
 
@@ -1255,8 +1301,14 @@ function App() {
   const handleApplyExcelData = () => {
     if (!excelParsedData) return;
 
-    setBumans(excelParsedData.bumans);
+    const bumanWithEmptyJudges = excelParsedData.bumans.map(b => ({
+      ...b,
+      judgeIds: []
+    }));
+
+    setBumans(bumanWithEmptyJudges);
     setProducts(excelParsedData.products);
+
 
     if (excelParsedData.bumans.length > 0) {
       setProductBuman(excelParsedData.bumans[0].prefix);
@@ -2195,14 +2247,15 @@ function App() {
                 </div>
               </div>
 
-              <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-hidden max-w-[980px] shadow-sm">
-                <div className="grid grid-cols-[56px_90px_110px_1.1fr_1.4fr_120px_80px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82]">
+              <div className="bg-white border border-[#e5e9f0] rounded-[14px] max-w-[980px] shadow-sm relative z-10">
+                <div className="grid grid-cols-[56px_85px_105px_1fr_1.2fr_105px_140px_70px] bg-[#f4f6fa] border-b border-[#e5e9f0] text-[12px] font-extrabold text-[#5a6a82] rounded-t-[14px]">
                   <div className="p-3 text-center">No.</div>
                   <div className="p-3">코드</div>
                   <div className="p-3">평가 방식</div>
                   <div className="p-3">부문그룹</div>
                   <div className="p-3">부문명</div>
                   <div className="p-3">제품 수</div>
+                  <div className="p-3 text-center">평가자 설정</div>
                   <div className="p-3 text-center">삭제</div>
                 </div>
 
@@ -2212,6 +2265,19 @@ function App() {
                     ? "bg-[#eef4fb] text-[#2f5488] border border-[#c6d6ee]"
                     : "bg-[#f2f7ec] text-[#5a7a3f] border border-[#cfe0cf]";
 
+                  const assignedJids = Array.isArray(b.judgeIds) ? b.judgeIds : judges.map(j => j.id);
+                  const isAll = judges.length > 0 && assignedJids.length === judges.length;
+                  const badgeText = assignedJids.length === 0 ? "0명 지정" : isAll ? `전체 (${assignedJids.length}명)` : `${assignedJids.length}명 지정`;
+                  const judgeBtnStyle = assignedJids.length === 0
+                    ? "bg-[#fefce8] text-[#854d0e] border-[#fef08a] hover:bg-[#fef9c3]"
+                    : isAll
+                      ? "bg-[#eef4fb] text-[#2f5488] border-[#c6d6ee] hover:bg-[#deebf9]"
+                      : "bg-[#fefce8] text-[#854d0e] border-[#fef08a] hover:bg-[#fef9c3]";
+                  const assignedJudgesList = judges.filter(j => assignedJids.includes(j.id));
+                  const assignedNamesStr = assignedJudgesList.length > 0
+                    ? assignedJudgesList.map(j => j.name).join(', ')
+                    : '지정된 심사위원이 없습니다.';
+
                   return (
                     <div
                       key={b.id}
@@ -2220,7 +2286,7 @@ function App() {
                       onDragOver={(e) => handleDragOver(e, idx)}
                       onDragEnd={handleDragEnd}
                       onDrop={(e) => handleDrop(e, idx)}
-                      className={`grid grid-cols-[56px_90px_110px_1.1fr_1.4fr_120px_80px] border-b border-[#eef1f6] align-center items-center last:border-b-0 transition-all select-none ${draggedIdx === idx ? 'opacity-40 bg-[#f4f6fa]/70 border-dashed border-primary/20' : 'bg-white'
+                      className={`grid grid-cols-[56px_85px_105px_1fr_1.2fr_105px_140px_70px] border-b border-[#eef1f6] align-center items-center last:border-b-0 transition-all select-none ${draggedIdx === idx ? 'opacity-40 bg-[#f4f6fa]/70 border-dashed border-primary/20' : 'bg-white'
                         }`}
                     >
                       <div className="p-3 text-center font-bold text-[#8b97ab] cursor-grab active:cursor-grabbing flex items-center justify-center gap-1.5" title="드래그하여 순서 변경">
@@ -2282,6 +2348,29 @@ function App() {
                           {prodLen}개 제품
                         </span>
                       </div>
+                      <div className="p-1.5 text-center relative group">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBumanForJudge(b)}
+                          className={`inline-flex items-center justify-center gap-1.5 py-[6px] px-[10px] rounded-[8px] text-[12px] font-extrabold border transition-all cursor-pointer shadow-2xs ${judgeBtnStyle}`}
+                        >
+                          <span>👤</span>
+                          <span>{badgeText}</span>
+                        </button>
+
+                        {/* 마우스 오버 시 버튼 아래쪽에 나타나는 툴팁 팝업 */}
+                        <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 hidden group-hover:flex flex-col items-center z-[120] pointer-events-none animate-in fade-in zoom-in-95 duration-150">
+                          <div className="w-0 h-0 border-x-[6px] border-x-transparent border-b-[6px] border-b-[#1b2a4a] -mb-[1px] z-[121]"></div>
+                          <div className="bg-[#1b2a4a] text-white text-[12px] font-bold py-2 px-3.5 rounded-xl shadow-xl border border-slate-700 whitespace-nowrap flex flex-col items-center gap-1">
+                            <div className="text-[11px] text-yellow-400 font-extrabold">
+                              [{b.prefix}] {b.name || '부문'} 담당 평가자 ({assignedJudgesList.length}명)
+                            </div>
+                            <div className="text-[12px] text-slate-100 font-semibold">
+                              {assignedNamesStr}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <div className="p-1.5 text-center">
                         <button
                           onClick={() => handleDeleteBuman(b.id)}
@@ -2293,6 +2382,7 @@ function App() {
                     </div>
                   );
                 })}
+
 
                 <div className="p-3.5 bg-gray-50/50">
                   <button
@@ -2928,17 +3018,48 @@ function App() {
             (() => {
               const rbk = bumans.some(b => b.prefix === resultBuman) ? resultBuman : (bumans[0]?.prefix || 'A');
               const isBlind = activeResultBumanObject?.cat === 'blind' || activeResultBumanObject?.type === 'blind';
-              const canTrim = judges.length >= 3;
 
-              // 1. 현재 부문에 부합하는 템플릿 및 합계 배점 탐색
+              // 1. 현재 부문에 부합하는 템플릿, 지정 심사위원 및 합계 배점 탐색
               const bumanObj = bumans.find(b => b.prefix === rbk);
               const bumanType = bumanObj?.cat || bumanObj?.type || 'open';
-              const matchTemplate = templates.find(t => t.target_type === 'specific_buman' && t.target_id === rbk)
+
+              // 해당 부문에 지정된 심사위원 전용 배열 (어느 한 부문이라도 심사위원이 명시 지정된 대회라면 지정된 심사위원만 엄격하게 필터링)
+              const hasExplicitMapping = bumans.some(b => Array.isArray(b.judgeIds) && b.judgeIds.length > 0);
+              const bumanJudges = (bumanObj && Array.isArray(bumanObj.judgeIds))
+                ? (hasExplicitMapping ? judges.filter(j => bumanObj.judgeIds.includes(j.id)) : judges)
+                : judges;
+
+
+              const canTrim = bumanJudges.length >= 3;
+
+              let matchTemplate = templates.find(t => t.target_type === 'specific_buman' && t.target_id === rbk)
                 || templates.find(t => t.target_type === (bumanType === 'blind' ? 'blind_all' : 'open_all'));
 
+              if (!matchTemplate || !matchTemplate.groups || matchTemplate.groups.length === 0) {
+                const catDef = ITEMS[bumanObj?.cat] || ITEMS.ricefood;
+                const fallbackGroups = [];
+                if (catDef.gwan && catDef.gwan.length > 0) {
+                  fallbackGroups.push({
+                    id: 'gwan',
+                    name: '관능 평가',
+                    convertTo: catDef.convert ? '70' : '',
+                    items: catDef.gwan.map(it => ({ id: it.key, name: it.name, max: it.max }))
+                  });
+                }
+                if (catDef.sang && catDef.sang.length > 0) {
+                  fallbackGroups.push({
+                    id: 'sang',
+                    name: '상품성 평가',
+                    convertTo: '',
+                    items: catDef.sang.map(it => ({ id: it.key, name: it.name, max: it.max }))
+                  });
+                }
+                matchTemplate = { id: 'fallback', groups: fallbackGroups };
+              }
+
               // 2. 심사위원별 상세 채점 점수 분리 배분(Distribution) 시뮬레이션 헬퍼 정의
-               const getJudgeDetailedScores = (pIdx, jIdx, p) => {
-                const jObj = judges[jIdx];
+              const getJudgeDetailedScores = (pIdx, jIdx, p) => {
+                const jObj = bumanJudges[jIdx];
                 const judgeIdKey = String(jObj?.id);
                 const pScores = actualScores[judgeIdKey]?.[p.code] || {};
                 const filledCount = Object.keys(pScores).length;
@@ -2949,7 +3070,7 @@ function App() {
                 let totalConvertedScore = 0;
                 let itemScoresMap = {};
 
-                if (matchTemplate && matchTemplate.groups) {
+                if (matchTemplate && matchTemplate.groups && matchTemplate.groups.length > 0) {
                   matchTemplate.groups.forEach((g) => {
                     const gMaxRaw = (g.items || []).reduce((sum, it) => sum + (parseInt(it.max) || 0), 0);
                     const gConvertTo = parseInt(g.convertTo) || 0;
@@ -2957,11 +3078,19 @@ function App() {
                     let gRawScore = 0;
                     const gItems = g.items || [];
 
-                    gItems.forEach((it) => {
-                      const itScore = pScores[String(it.id)] !== undefined ? pScores[String(it.id)] : 0;
-                      itemScoresMap[it.id] = itScore;
-                      gRawScore += itScore;
+                    let allRawKeys = Object.keys(pScores);
+                    gItems.forEach((it, itIdx) => {
+                      let val = 0;
+                      if (pScores[String(it.id)] !== undefined) val = pScores[String(it.id)];
+                      else if (pScores[it.id] !== undefined) val = pScores[it.id];
+                      else if (pScores[it.name] !== undefined) val = pScores[it.name];
+                      else if (allRawKeys[itIdx] !== undefined) val = pScores[allRawKeys[itIdx]];
+
+                      const numVal = Number(val) || 0;
+                      itemScoresMap[it.id] = numVal;
+                      gRawScore += numVal;
                     });
+
 
                     let gConverted = gRawScore;
                     if (gConvertTo > 0 && gMaxRaw > 0) {
@@ -2977,8 +3106,6 @@ function App() {
                       converted: gConverted
                     });
                   });
-                } else {
-                  totalConvertedScore = 0;
                 }
 
                 return {
@@ -2989,6 +3116,7 @@ function App() {
                   hasScores
                 };
               };
+
 
               // 완료된 심사위원 계산 (현재 부문의 모든 제품의 모든 항목에 점수를 채웠는지 판별)
               const activeProductsList = products[rbk] || [];
@@ -3001,7 +3129,7 @@ function App() {
                 });
               }
 
-              const completedJudgesCount = judges.filter(j => {
+              const completedJudgesCount = bumanJudges.filter(j => {
                 const jScores = actualScores[String(j.id)] || {};
                 const hasData = activeProductsList.length > 0 && matchTemplateItems.length > 0;
                 if (!hasData) return false;
@@ -3014,7 +3142,7 @@ function App() {
 
               // 각 제품별 심사위원 채점 매트릭스 데이터 생성
               const matrixList = (products[rbk] || []).map((p, pIdx) => {
-                const judgeDetails = judges.map((j, jIdx) => {
+                const judgeDetails = bumanJudges.map((j, jIdx) => {
                   return getJudgeDetailedScores(pIdx, jIdx, p);
                 });
 
@@ -3040,7 +3168,6 @@ function App() {
 
                   finalTotal = rawTotal - minVal - maxVal;
                 } else {
-                  // trim을 할 수 없거나 입력 심사위원이 부족할 때는 입력된 모든 점수의 단순 합계를 최종 점수로 반영
                   finalTotal = rawTotal;
                 }
 
@@ -3065,7 +3192,7 @@ function App() {
               });
 
               // 3. 심사위원별 개별 상세 집계 데이터셋 구성
-              const judgeSheets = judges.map((j, jIdx) => {
+              const judgeSheets = bumanJudges.map((j, jIdx) => {
                 const sheetRows = (products[rbk] || []).map((p, pIdx) => {
                   const detailed = getJudgeDetailedScores(pIdx, jIdx, p);
                   return {
@@ -3090,6 +3217,7 @@ function App() {
                   }))
                 };
               });
+
 
               return (
                 <div className="space-y-5">
@@ -3194,7 +3322,7 @@ function App() {
                               <th className="sticky left-[90px] bg-[#1b2a4a] text-white p-3 font-extrabold text-left min-w-[150px] z-10">
                                 제품명
                               </th>
-                              {judges.map((j) => (
+                              {bumanJudges.map((j) => (
                                 <th key={j.id} className="bg-[#243a63] text-white p-3 font-semibold text-center min-w-[100px] whitespace-nowrap">
                                   {j.name}<br /><span className="text-[10px] text-textBlue font-normal">{j.affiliation}</span>
                                 </th>
@@ -3227,13 +3355,13 @@ function App() {
                                   </td>
 
                                   {/* 심사위원 개별 점수 */}
-                                  {judges.map((j, jIdx) => {
+                                  {bumanJudges.map((j, jIdx) => {
                                     // 이 심사위원의 해당 제품의 최종 환산 점수를 구함
                                     const detailed = getJudgeDetailedScores(idx, jIdx, products[rbk][idx]);
                                     const scoreVal = detailed.totalConverted;
 
                                     // 최고/최저 점수 마크 판정용 임시 탐색
-                                    const allScores = judges.map((_, tmpIdx) => getJudgeDetailedScores(idx, tmpIdx, products[rbk][idx]).totalConverted);
+                                    const allScores = bumanJudges.map((_, tmpIdx) => getJudgeDetailedScores(idx, tmpIdx, products[rbk][idx]).totalConverted);
                                     let isMin = false;
                                     let isMax = false;
                                     if (canTrim) {
@@ -3299,18 +3427,24 @@ function App() {
                       {/* 가로형 심사위원 셀렉터 단추 그룹 */}
                       <div className="flex gap-1.5 flex-wrap items-center bg-[#f4f6fa] p-3 rounded-xl border border-[#dde3ec] max-w-[1100px]">
                         <span className="text-[12px] font-extrabold text-[#5a6a82] mr-2">심사위원 필터:</span>
-                        {judges.map((j, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => setSelectedResultJudgeIdx(idx)}
-                            className={`py-1.5 px-3.5 rounded-lg text-[13px] font-extrabold border transition-all cursor-pointer ${selectedResultJudgeIdx === idx
-                              ? 'bg-primary border-primary text-white shadow-sm'
-                              : 'bg-white border-[#cbd3e1] text-[#5a6a82] hover:bg-gray-50'}`}
-                          >
-                            {j.name} ({j.affiliation})
-                          </button>
-                        ))}
+                        {bumanJudges.length === 0 ? (
+                          <span className="text-[13px] font-bold text-[#8b97ab]">지정된 담당 심사위원이 없습니다. [부문 등록] 탭에서 심사위원을 지정해 주세요.</span>
+                        ) : (
+                          bumanJudges.map((j, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setSelectedResultJudgeIdx(idx)}
+                              className={`py-1.5 px-3.5 rounded-lg text-[13px] font-extrabold border transition-all cursor-pointer ${selectedResultJudgeIdx === idx
+                                ? 'bg-primary border-primary text-white shadow-sm'
+                                : 'bg-white border-[#cbd3e1] text-[#5a6a82] hover:bg-gray-50'}`}
+                            >
+                              {j.name} ({j.affiliation})
+                            </button>
+                          ))
+                        )}
+
                       </div>
+
 
                       {/* 심사위원 개별 시트 2단 헤더 테이블 */}
                       <div className="bg-white border border-[#e5e9f0] rounded-[14px] overflow-auto max-w-full shadow-sm">
@@ -3720,8 +3854,130 @@ function App() {
         </div>
       )}
 
+      {/* 👤 부문별 평가자 지정 모달 */}
+      {selectedBumanForJudge && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-[540px] w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* 모달 헤더 */}
+            <div className="p-5 px-6 border-b border-gray-100 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-[17px] font-extrabold text-[#1b2a4a] flex items-center gap-2">
+                  <span>👤 [{selectedBumanForJudge.prefix}] {selectedBumanForJudge.name || '부문'} 평가자 설정</span>
+                </h3>
+                <p className="text-[12px] text-gray-500 mt-0.5 font-medium">
+                  이 부문을 심사할 심사위원을 다중 체크박스로 선택하세요.
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedBumanForJudge(null)}
+                className="w-8 h-8 rounded-full bg-white border border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex items-center justify-center text-lg font-bold transition-all cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 모달 바디 - 전체선택/해제 & 체크박스 리스트 */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              {judges.length === 0 ? (
+                <div className="p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <p className="text-[14px] font-bold text-gray-500">등록된 심사위원이 없습니다.</p>
+                  <p className="text-[12px] text-gray-400 mt-1">상단 [심사위원 관리] 탭에서 심사위원을 먼저 등록해 주세요.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                    <span className="text-[13px] font-bold text-gray-600">
+                      총 {judges.length}명의 심사위원 중 ({(Array.isArray(selectedBumanForJudge.judgeIds) ? selectedBumanForJudge.judgeIds : judges.map(j => j.id)).length}명 지정됨)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const allIds = judges.map(j => j.id);
+                          const updated = bumans.map(x => x.id === selectedBumanForJudge.id ? { ...x, judgeIds: allIds } : x);
+                          setBumans(updated);
+                          setSelectedBumanForJudge({ ...selectedBumanForJudge, judgeIds: allIds });
+                        }}
+                        className="px-2.5 py-1 text-[12px] font-extrabold text-primary bg-primary/10 hover:bg-primary/20 rounded-md transition-all cursor-pointer"
+                      >
+                        전체 선택
+                      </button>
+                      <button
+                        onClick={() => {
+                          const updated = bumans.map(x => x.id === selectedBumanForJudge.id ? { ...x, judgeIds: [] } : x);
+                          setBumans(updated);
+                          setSelectedBumanForJudge({ ...selectedBumanForJudge, judgeIds: [] });
+                        }}
+                        className="px-2.5 py-1 text-[12px] font-extrabold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-all cursor-pointer"
+                      >
+                        선택 해제
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                    {judges.map((j) => {
+                      const curJids = Array.isArray(selectedBumanForJudge.judgeIds) ? selectedBumanForJudge.judgeIds : judges.map(x => x.id);
+                      const isChecked = curJids.includes(j.id);
+
+                      return (
+                        <div
+                          key={j.id}
+                          onClick={() => {
+                            let nextJids = [];
+                            if (isChecked) {
+                              nextJids = curJids.filter(id => id !== j.id);
+                            } else {
+                              nextJids = [...curJids, j.id];
+                            }
+                            const updated = bumans.map(x => x.id === selectedBumanForJudge.id ? { ...x, judgeIds: nextJids } : x);
+                            setBumans(updated);
+                            setSelectedBumanForJudge({ ...selectedBumanForJudge, judgeIds: nextJids });
+                          }}
+                          className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                            isChecked ? 'bg-[#f4f7fc] border-[#b0c4de] text-[#1b2a4a]' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {}}
+                              className="w-4 h-4 rounded text-primary focus:ring-primary/20 accent-[#1b2a4a] pointer-events-none"
+                            />
+                            <div>
+                              <div className="text-[14px] font-extrabold">{j.name}</div>
+                              <div className="text-[12px] text-gray-400">{j.affiliation || '소속 없음'} · {j.role || '심사위원'}</div>
+                            </div>
+                          </div>
+                          {isChecked && (
+                            <span className="text-[11px] font-bold py-0.5 px-2 bg-[#2f5488] text-white rounded-full">
+                              담당
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 모달 푸터 */}
+            <div className="p-4 px-6 bg-slate-50 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setSelectedBumanForJudge(null)}
+                className="h-10 px-6 rounded-xl bg-[#1b2a4a] text-white text-[14px] font-extrabold hover:bg-[#2c3e66] transition-all cursor-pointer shadow-xs"
+              >
+                확인 완료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 공통 토스트 안내 */}
       {toast && (
+
         <div className="fixed left-[50%] bottom-[36px] -translate-x-[50%] bg-[#1b2a4a] text-white py-[14px] px-[26px] rounded-[12px] text-[15px] font-semibold shadow-[0_10px_30px_rgba(0,0,0,0.25)] z-[50] flex items-center gap-[10px]">
           <span className="w-[22px] h-[22px] rounded-full bg-[#3ea06a] inline-flex items-center justify-center text-[13px] font-extrabold text-white">✓</span>
           {toast}

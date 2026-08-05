@@ -88,6 +88,11 @@ function App() {
   const [completed, setCompleted] = useState({}); // { [bumanKey]: boolean }
   const [modal, setModal] = useState(null); // { code, itemKey } | null
   const [toast, setToast] = useState('');
+  const [assignedPrefixes, setAssignedPrefixes] = useState(null);
+  const [isVerified, setIsVerified] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verifyLoginData, setVerifyLoginData] = useState(null);
+
 
   // API 동적 데이터 바인딩 상태
   const [systemName, setSystemName] = useState('2026 우리쌀·우리술 K-라이스페스타 품평회');
@@ -119,11 +124,13 @@ function App() {
           if (sess.judgeId) setJudgeId(sess.judgeId);
           if (sess.completed) setCompleted(sess.completed);
           if (sess.deviceLabel) setDeviceLabel(sess.deviceLabel);
+          if (sess.assignedPrefixes) setAssignedPrefixes(sess.assignedPrefixes);
           
           if (sess.judgeName && sess.judgeId) {
             const localScores = await loadJudgeScores(groupName, sess.judgeName);
             setScores(localScores);
           }
+
           
           // 새로고침(F5) 등 history.state가 유지될 때만 직전 화면 복원, 기본은 심사위원 입력(start) 화면
           const restoredScreen = (window.history.state && window.history.state.screen) 
@@ -149,15 +156,36 @@ function App() {
     }
   }, [selectedBuman, groupName]);
 
+  // 점수가 변경되거나 마운트 시 로컬의 미동기화(pending) 점수를 3초 간격으로 자동 백엔드 DB 동기화
+  useEffect(() => {
+    const nm = judgeName.trim();
+    if (!nm) return;
+
+    const doSync = () => {
+      let activeJid = judgeId;
+      if (!activeJid && judges.length > 0) {
+        const matchJ = judges.find(j => j.name === nm);
+        if (matchJ) activeJid = matchJ.id;
+      }
+      syncPending(nm, activeJid);
+    };
+
+    doSync();
+    const timer = setInterval(doSync, 3000);
+    return () => clearInterval(timer);
+  }, [judgeId, judgeName, judges, groupName, deviceKey, authKey, scores]);
+
   // 온라인 복귀 시 미동기화 점수 자동 전송
   useEffect(() => {
     const onOnline = () => {
       const nm = judgeName.trim();
-      if (judgeId && nm) syncPending(nm, judgeId);
+      let activeJid = judgeId || judges.find(j => j.name === nm)?.id;
+      if (nm) syncPending(nm, activeJid);
     };
     window.addEventListener('online', onOnline);
     return () => window.removeEventListener('online', onOnline);
-  }, [judgeId, judgeName, groupName, deviceKey, authKey]);
+  }, [judgeId, judgeName, judges, groupName, deviceKey, authKey]);
+
 
   // 대회 초기화: 온라인이면 서버 로드+캐시, 오프라인이면 캐시로 진입 검증
   useEffect(() => {
@@ -192,7 +220,17 @@ function App() {
       }
       if (data.products) setProductsMap(data.products);
       if (data.templates) setTemplatesMap(data.templates);
-      if (data.judges) setJudges(data.judges);
+      if (data.judges) {
+        setJudges(data.judges);
+        if (judgeName && judgeName.trim()) {
+          const matchJ = data.judges.find(j => j.name === judgeName.trim());
+          if (matchJ && matchJ.id !== judgeId) {
+            setJudgeId(matchJ.id);
+            saveSession(groupName, { judgeId: matchJ.id });
+          }
+        }
+      }
+
     };
     const run = async () => {
       const dk = await getDeviceKey();
@@ -268,7 +306,10 @@ function App() {
 
   // 오프라인 중 저장된 미동기화(pending) 점수를 서버로 전송하고 synced 처리
   const syncPending = async (name, jid) => {
-    if (!jid || !name) return;
+    if (!name) return;
+    let activeJid = jid || judges.find(j => j.name === name.trim())?.id;
+    if (!activeJid) return;
+
     try {
       const pending = await getPendingCells(groupName, name);
       for (const cell of pending) {
@@ -277,14 +318,21 @@ function App() {
             method: "POST",
             headers: authHeaders(),
             body: JSON.stringify({
-              judgeId: jid,
+              judgeId: activeJid,
               productCode: cell.productCode,
-              itemId: isNaN(cell.itemId) ? 0 : parseInt(cell.itemId),
+              itemId: cell.itemId,
               score: cell.score
             })
           });
-          if (res.ok) await markCellSynced(cell);
-          else break;
+          if (res.ok) {
+            await markCellSynced(cell);
+          } else if (res.status === 404 || res.status === 403) {
+            // 더 이상 존재하지 않거나 무효한 불유효 셀은 로컬 DB에서 자동 정제 삭제
+            await deleteScoreCell(cell);
+          } else {
+            break;
+          }
+
         } catch (e) {
           break; // 여전히 오프라인 → 다음 온라인에 재시도
         }
@@ -293,6 +341,7 @@ function App() {
       console.error('점수 동기화 에러:', e);
     }
   };
+
 
   // 평가자 확정 후 로컬 점수 로드 + 세션 저장 + 평가 화면 진입
   const enterEval = async (name, jid, serverScores, isOnline) => {
@@ -415,14 +464,14 @@ function App() {
     return productsMap[bumanKey] || [];
   };
 
-  // 로그인 (시작) 확인
-  const handleStart = async (e) => {
-    e.preventDefault();
+  // 1단계: 평가자 성명 검증 (확인 버튼 클릭 시)
+  const handleVerifyJudge = async (e) => {
+    if (e) e.preventDefault();
     if (!judgeName.trim()) {
       alert('평가자 성명을 기입해 주세요.');
       return;
     }
-    
+    setIsVerifying(true);
     const name = judgeName.trim();
     try {
       const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/login`, {
@@ -432,10 +481,21 @@ function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        await enterEval(name, data.judgeId, data.scores, true);
+        setVerifyLoginData(data);
+        setJudgeId(data.judgeId);
+        if (data.assignedPrefixes) {
+          setAssignedPrefixes(data.assignedPrefixes);
+          await saveSession(groupName, { assignedPrefixes: data.assignedPrefixes });
+          const visible = bumans.filter(b => data.assignedPrefixes.includes(b.prefix));
+          if (visible.length > 0) {
+            setSelectedBuman(visible[0].prefix);
+          }
+        }
+        setIsVerified(true);
       } else {
-        // 관리자에 등록된 평가자가 아니면 서버 메시지 그대로 노출하고 진입 차단
-        let msg = "평가를 시작할 수 없습니다. 잠시 후 다시 시도해 주세요.";
+        setIsVerified(false);
+        setVerifyLoginData(null);
+        let msg = "등록된 평가자가 아닙니다. 관리자에게 등록된 성명을 정확히 입력해 주세요.";
         try {
           const errData = await res.json();
           if (errData && errData.detail) msg = errData.detail;
@@ -443,16 +503,32 @@ function App() {
         alert(msg);
       }
     } catch (err) {
-      // 오프라인: 캐시된 평가자 명단으로 검증 후 진입
-      console.error("로그인 API 에러(오프라인 검증 시도):", err);
+      console.error("평가자 검증 에러:", err);
       const cachedJudge = judges.find(j => j.name === name);
       if (!cachedJudge) {
-        alert('오프라인 상태입니다. 등록된 평가자 명단에 없는 이름이거나 대회 데이터가 아직 캐시되지 않았습니다.');
-        return;
+        alert('등록된 평가자 명단에 없는 이름이거나 오프라인 인증에 실패했습니다.');
+        setIsVerified(false);
+        setVerifyLoginData(null);
+      } else {
+        setJudgeId(cachedJudge.id);
+        setVerifyLoginData({ judgeId: cachedJudge.id, scores: null });
+        setIsVerified(true);
       }
-      await enterEval(name, cachedJudge.id, null, false);
+    } finally {
+      setIsVerifying(false);
     }
   };
+
+  // 2단계: 평가 시작하기 버튼 클릭
+  const handleStart = async (e) => {
+    if (e) e.preventDefault();
+    if (!isVerified || !verifyLoginData) {
+      alert('먼저 평가자 성명 확인 버튼을 눌러 평가자 정보를 검증해 주세요.');
+      return;
+    }
+    await enterEval(judgeName.trim(), verifyLoginData.judgeId, verifyLoginData.scores, true);
+  };
+
 
   // 기기 등록 요청 (미승인 화면에서 기기 이름 제출)
   const handleRegisterDevice = async () => {
@@ -504,20 +580,33 @@ function App() {
     // 로컬 우선 저장 (pending) — 오프라인에서도 보존
     await saveScoreCell({ groupName, judgeName: name, judgeId, bumanKey: selectedBuman, productCode: code, itemId: String(itemKey), score: val, syncStatus: 'pending' });
 
+    // 심사위원 ID가 state에 미설정되었더라도 명단에서 성명으로 즉시 보정
+    let activeJid = judgeId;
+    if (!activeJid && judgeName) {
+      const matchJ = judges.find(j => j.name === judgeName.trim());
+      if (matchJ) {
+        activeJid = matchJ.id;
+        setJudgeId(matchJ.id);
+      }
+    }
+
     // 서버 실시간 동기화 시도 → 성공 시 synced
-    if (judgeId) {
+    if (activeJid) {
       try {
         const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
           method: "POST",
           headers: authHeaders(),
           body: JSON.stringify({
-            judgeId,
+            judgeId: activeJid,
             productCode: code,
-            itemId: isNaN(itemKey) ? 0 : parseInt(itemKey),
+            itemId: itemKey,
             score: val
           })
         });
         if (res.ok) await markCellSynced({ groupName, judgeName: name, bumanKey: selectedBuman, productCode: code, itemId: String(itemKey) });
+        else {
+          console.error("실시간 배점 응답 실패 status:", res.status);
+        }
       } catch (e) {
         console.error("실시간 배점 동기화 실패:", e);
       }
@@ -541,24 +630,32 @@ function App() {
     // 로컬 셀 삭제
     await deleteScoreCell({ groupName, judgeName: name, bumanKey: selectedBuman, productCode: code, itemId: String(itemKey) });
 
+    let activeJid = judgeId;
+    if (!activeJid && judgeName) {
+      const matchJ = judges.find(j => j.name === judgeName.trim());
+      if (matchJ) activeJid = matchJ.id;
+    }
+
     // 서버 실시간 동기화 (삭제)
-    if (judgeId) {
+    if (activeJid) {
       try {
         await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
           method: "POST",
           headers: authHeaders(),
           body: JSON.stringify({
-            judgeId,
+            judgeId: activeJid,
             productCode: code,
-            itemId: isNaN(itemKey) ? 0 : parseInt(itemKey),
+            itemId: itemKey,
             score: null
           })
         });
       } catch (e) {
-        console.error("실시간 배점 삭제 실패:", e);
+        console.error("실시간 배점 삭제 동기화 실패:", e);
       }
     }
   };
+
+
 
   // 엑셀 모의 저장 기능
   const handleSaveExcel = () => {
@@ -765,40 +862,79 @@ function App() {
               </p>
 
               <form onSubmit={handleStart}>
-                {/* 성명 입력 */}
-                <div className="mt-[32px]">
+                {/* 1단계: 성명 입력 및 [평가자 확인] 버튼 */}
+                <div className="mt-[28px]">
                   <label className="block text-[14px] font-bold text-textSub leading-none">
-                    평가자 (심사위원 성명)
+                    평가자 성명 (등록된 심사위원 명단)
                   </label>
-                  <input
-                    type="text"
-                    value={judgeName}
-                    onChange={(e) => setJudgeName(e.target.value)}
-                    className="mt-[10px] w-full h-[56px] border-[1.5px] border-[#cbd3e1] rounded-[12px] px-[18px] text-[18px] font-semibold text-[#1b2a4a] bg-white focus:outline-none focus:border-[#1b2a4a] transition-all"
-                    placeholder="예) 홍길동 심사위원"
-                    required
-                  />
+                  <div className="mt-[10px] flex items-center gap-[10px]">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={judgeName}
+                        onChange={(e) => {
+                          setJudgeName(e.target.value);
+                          if (isVerified) setIsVerified(false);
+                        }}
+                        className={`w-full h-[54px] border-[1.5px] rounded-[12px] px-[18px] text-[18px] font-semibold text-[#1b2a4a] bg-white focus:outline-none transition-all ${
+                          isVerified ? 'border-[#3ea06a] bg-[#f4faf6]' : 'border-[#cbd3e1] focus:border-[#1b2a4a]'
+                        }`}
+                        placeholder="예) 김심사"
+                        required
+                      />
+                      {isVerified && (
+                        <span className="absolute right-[14px] top-1/2 -translate-y-1/2 text-[12px] font-extrabold text-[#2f7a4f] bg-[#eef7f1] border border-[#3ea06a] py-[4px] px-[10px] rounded-full">
+                          ✓ 확인 완료
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!judgeName.trim() || isVerifying}
+                      onClick={handleVerifyJudge}
+                      className={`h-[54px] px-[20px] rounded-[12px] text-[15px] font-extrabold transition-all cursor-pointer shrink-0 shadow-xs ${
+                        isVerified
+                          ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                          : judgeName.trim()
+                          ? 'bg-[#107c41] text-white hover:bg-[#0b6433]'
+                          : 'bg-[#c3ccdb] text-white cursor-not-allowed'
+                      }`}
+                    >
+                      {isVerifying ? '확인 중...' : isVerified ? '재확인' : '평가자 확인'}
+                    </button>
+                  </div>
                 </div>
 
-                {/* 부문 선택 */}
-                <div className="mt-[30px]">
-                  <div className="text-[14px] font-bold text-textSub leading-none">
-                    담당 부문 선택
-                  </div>
+                {/* 2단계: 평가자 확인 성공(isVerified) 시 담당 부문 및 시작 버튼 노출 */}
+                {isVerified ? (
+                  <div className="mt-[28px] animate-in fade-in slide-in-from-top-3 duration-250">
+                    {/* 담당 부문 선택 */}
+                    <div className="text-[14px] font-extrabold text-[#1b2a4a]">
+                      담당 부문 선택
+                    </div>
 
-                  {/* 관리자에 등록된 부문 그룹(group) 기준으로 동적 렌더링 */}
-                  {[...new Set(bumans.map(b => b.group || '기타'))].map((groupName, gIdx) => {
-                    const groupBumans = bumans.filter(b => (b.group || '기타') === groupName);
-                    const test = groupBumans[0]?.test || '';
-                    const isBlind = test === '블라인드';
-                    const cols = groupBumans.length >= 4 ? 'grid-cols-4' : 'grid-cols-3';
-                    return (
-                      <React.Fragment key={groupName}>
-                        <div className={`text-[12px] font-extrabold ${isBlind ? 'text-brandBlue' : 'text-brandGreen'} ${gIdx === 0 ? 'mt-[14px]' : 'mt-[18px]'} tracking-[1px] leading-none`}>
-                          {groupName} · {test}
-                        </div>
-                        <div className={`grid ${cols} gap-[10px] mt-[8px]`}>
-                          {groupBumans.map((item) => (
+
+                    {/* 이 심사위원에게 배정된 visibleBumans 만 동적 렌더링 */}
+                    {(() => {
+                      const visibleBumans = (assignedPrefixes !== null && Array.isArray(assignedPrefixes))
+                        ? bumans.filter(b => assignedPrefixes.includes(b.prefix))
+                        : bumans;
+
+                      if (visibleBumans.length === 0) {
+                        return (
+                          <div className="w-full border border-yellow-300 bg-yellow-50/90 rounded-[12px] p-6 text-center mt-[12px]">
+                            <div className="text-[28px] mb-1">⚠️</div>
+                            <div className="text-[15px] font-extrabold text-[#854d0e]">배정된 평가 부문이 없습니다.</div>
+                            <div className="mt-1 text-[13px] text-[#a16207]">
+                              관리자에게 평가 부문 배정을 요청해 주세요.
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="grid grid-cols-3 gap-[10px] mt-[10px]">
+                          {visibleBumans.map((item) => (
                             <button
                               key={item.key}
                               type="button"
@@ -814,24 +950,28 @@ function App() {
                             </button>
                           ))}
                         </div>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
+                      );
+                    })()}
 
-                {/* 시작 버튼 */}
-                <button
-                  type="submit"
-                  disabled={!judgeName.trim()}
-                  className={`w-full h-[56px] rounded-[12px] text-[18px] mt-[40px] transition-all flex items-center justify-center ${
-                    judgeName.trim().length > 0
-                      ? 'bg-[#1b2a4a] hover:bg-[#243a63] text-white font-extrabold shadow-lg hover:shadow-xl cursor-pointer'
-                      : 'bg-[#c3ccdb] text-white font-bold cursor-default'
-                  }`}
-                >
-                  평가 시작하기 →
-                </button>
+                    {/* 평가 시작하기 버튼 */}
+                    <button
+                      type="submit"
+                      disabled={!judgeName.trim()}
+                      className="w-full h-[56px] rounded-[12px] text-[18px] mt-[32px] bg-[#1b2a4a] hover:bg-[#243a63] text-white font-extrabold shadow-lg hover:shadow-xl cursor-pointer transition-all flex items-center justify-center gap-2"
+                    >
+                      <span>[{selectedBuman}] 부문 평가 시작하기</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-[28px] p-5 rounded-[12px] bg-slate-50 border border-slate-200 text-center">
+                    <div className="text-[14px] text-gray-500 font-medium">
+                      👆 성명을 기입하신 후 <strong className="text-[#107c41]">[평가자 확인]</strong> 버튼을 누르시면 본인의 담당 부문이 표시됩니다.
+                    </div>
+                  </div>
+                )}
               </form>
+
             </div>
           </div>
         </div>
@@ -897,50 +1037,66 @@ function App() {
             </button>
           </div>
 
-          {/* 부문 전환 탭바 */}
-          <div className="bg-white border-b border-[#dde3ec] py-[10px] px-[22px] flex gap-[8px] items-center shrink-0 overflow-x-auto">
-            <span className="text-[12px] font-bold text-[#8b97ab] mr-[4px] whitespace-nowrap leading-none">
-              부문 전환
-            </span>
-            {bumans.map((b) => {
-              const active = b.key === selectedBuman;
-              // 해당 부문의 완료 여부 체크 (관리자 등록 템플릿 항목 기준)
-              const bList = getProductList(b.key);
-              const bItems = buildActiveItems(b.key);
-              const bScores = scores[b.key] || {};
-              const done = bList.length > 0 && bList.every(p => {
-                const s = bScores[p.code] || {};
-                return bItems.every(it => s[it.key] !== undefined);
-              });
+          {/* 부문 전환 탭바 (담당 부문만 필터링) */}
+          {(() => {
+            const visibleBumans = (assignedPrefixes !== null && Array.isArray(assignedPrefixes))
+              ? bumans.filter(b => assignedPrefixes.includes(b.prefix))
+              : bumans;
 
-              return (
-                <button
-                  key={b.key}
-                  onClick={() => setSelectedBuman(b.key)}
-                  className={`flex items-center gap-[7px] py-[8px] px-[14px] rounded-[10px] cursor-pointer whitespace-nowrap transition-all border ${
-                    active
-                      ? 'border-primary bg-primary text-white font-extrabold'
-                      : done
-                      ? 'border-[#3ea06a] bg-[#eef7f1] text-[#2f7a4f] font-semibold'
-                      : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300 font-semibold'
-                  }`}
-                >
-                  <span className="text-[15px] font-extrabold">{b.prefix}</span>
-                  <span className="text-[12px] font-semibold opacity-90">{b.name}</span>
-                  {done && <span className={`text-[12px] font-bold ${active ? 'text-[#8fe0ac]' : 'text-[#3ea06a]'}`}>✓</span>}
-                </button>
-              );
-            })}
-          </div>
+            return (
+              <>
+                <div className="bg-white border-b border-[#dde3ec] py-[10px] px-[22px] flex gap-[8px] items-center shrink-0 overflow-x-auto">
+                  <span className="text-[12px] font-bold text-[#8b97ab] mr-[4px] whitespace-nowrap leading-none">
+                    부문 전환
+                  </span>
+                  {visibleBumans.map((b) => {
+                    const active = b.key === selectedBuman;
+                    // 해당 부문의 완료 여부 체크 (관리자 등록 템플릿 항목 기준)
+                    const bList = getProductList(b.key);
+                    const bItems = buildActiveItems(b.key);
+                    const bScores = scores[b.key] || {};
+                    const done = bList.length > 0 && bList.every(p => {
+                      const s = bScores[p.code] || {};
+                      return bItems.every(it => s[it.key] !== undefined);
+                    });
 
-          {/* 테이블 컨테이너 */}
-          <div className="flex-1 overflow-auto py-[18px] px-[22px] pb-[40px]">
-            {products.length === 0 ? (
-              <div className="w-full border border-[#cbd3e1] rounded-[10px] bg-white py-[60px] px-[24px] text-center">
-                <div className="text-[16px] font-bold text-[#5a6a82]">등록된 평가 제품이 없습니다.</div>
-                <div className="mt-[8px] text-[13px] text-[#8b97ab]">관리자에서 이 부문에 제품을 등록하면 평가표가 표시됩니다.</div>
-              </div>
-            ) : (
+                    return (
+                      <button
+                        key={b.key}
+                        onClick={() => setSelectedBuman(b.key)}
+                        className={`flex items-center gap-[7px] py-[8px] px-[14px] rounded-[10px] cursor-pointer whitespace-nowrap transition-all border ${
+                          active
+                            ? 'border-primary bg-primary text-white font-extrabold'
+                            : done
+                            ? 'border-[#3ea06a] bg-[#eef7f1] text-[#2f7a4f] font-semibold'
+                            : 'border-[#dde3ec] bg-white text-[#5a6a82] hover:border-gray-300 font-semibold'
+                        }`}
+                      >
+                        <span className="text-[15px] font-extrabold">{b.prefix}</span>
+                        <span className="text-[12px] font-semibold opacity-90">{b.name}</span>
+                        {done && <span className={`text-[12px] font-bold ${active ? 'text-[#8fe0ac]' : 'text-[#3ea06a]'}`}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 테이블 컨테이너 */}
+                <div className="flex-1 overflow-auto py-[18px] px-[22px] pb-[40px]">
+                  {assignedPrefixes !== null && visibleBumans.length === 0 ? (
+                    <div className="w-full border border-yellow-300 bg-yellow-50/90 rounded-[12px] p-8 text-center my-6 shadow-xs">
+                      <div className="text-[32px] mb-2">⚠️</div>
+                      <div className="text-[17px] font-extrabold text-[#854d0e]">배정된 평가 부문이 없습니다.</div>
+                      <div className="mt-2 text-[13px] text-[#a16207] font-semibold">
+                        {judgeName ? `[${judgeName}] ` : ''}심사위원님에게 배정된 평가 부문이 없습니다. 관리자에게 문의해 주세요.
+                      </div>
+                    </div>
+                  ) : products.length === 0 ? (
+                    <div className="w-full border border-[#cbd3e1] rounded-[10px] bg-white py-[60px] px-[24px] text-center">
+                      <div className="text-[16px] font-bold text-[#5a6a82]">등록된 평가 제품이 없습니다.</div>
+                      <div className="mt-[8px] text-[13px] text-[#8b97ab]">관리자에서 이 부문에 제품을 등록하면 평가표가 표시됩니다.</div>
+                    </div>
+                  ) : (
+
             <div className="overflow-x-auto w-full border border-[#cbd3e1] rounded-[10px] bg-white">
               <table className="border-collapse border-spacing-0 text-[13px] min-w-[900px] w-full bg-white overflow-hidden">
                 <thead>
@@ -1228,8 +1384,12 @@ function App() {
                 : '※ 오픈테스트 — 제품명·코드 표시. 설정된 배점에 맞추어 각 그룹 평가 및 환산 점수 소계가 산출됩니다.'}
             </div>
           </div>
-        </div>
-      )}
+        </>
+        );
+      })()}
+    </div>
+  )}
+
 
       {/* 3) 결과 요약 화면 (screen === 'done') */}
       {screen === 'done' && (

@@ -120,12 +120,61 @@ def custom_redoc_html(request: Request):
 # 환경변수로부터 데이터베이스 URL 정보 획득
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://fair_user:fair_password@db:3306/fair_db")
 
-# SQLAlchemy DB 엔진 초기화
+# SQLAlchemy DB 엔진 초기화 및 스키마 자동 마이그레이션
 try:
     engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 except Exception as e:
     engine = None
     print(f"데이터베이스 연결 설정 실패: {e}")
+
+def init_db_schema():
+    """서버 시작 시 필요 신규 테이블 및 마이그레이션 자동 실행 (운영 서버 deploy.sh 실행 시 자동 처리)"""
+    if not engine:
+        return
+    try:
+        with engine.connect() as conn:
+            # 1. fair_judge_buman 매핑 테이블 자동 생성
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS fair_judge_buman (
+                  fjb_id INT AUTO_INCREMENT PRIMARY KEY,
+                  fjb_fb_id INT NOT NULL,
+                  fjb_fj_id INT NOT NULL,
+                  FOREIGN KEY (fjb_fb_id) REFERENCES fair_buman(fb_id) ON DELETE CASCADE,
+                  FOREIGN KEY (fjb_fj_id) REFERENCES fair_judge(fj_id) ON DELETE CASCADE,
+                  UNIQUE KEY uq_fjb (fjb_fb_id, fjb_fj_id)
+                ) ENGINE=InnoDB;
+            """))
+
+            # 2. fair_score_record 컬럼 타입 VARCHAR(50) 지원 변경 (문자열/숫자 항목 ID 모두 수용)
+            try:
+                conn.execute(text("ALTER TABLE fair_score_record DROP FOREIGN KEY fair_score_record_ibfk_3;"))
+            except Exception:
+                pass
+            try:
+                conn.execute(text("ALTER TABLE fair_score_record MODIFY fsr_fei_id VARCHAR(50) NOT NULL;"))
+            except Exception as alter_ex:
+                print(f"fsr_fei_id ALTER NOTICE: {alter_ex}")
+
+
+            # 3. 기존 DB 운영 환경인 경우: 매핑 정보가 없으면 기존 심사위원들을 기본적으로 전체 부문에 백필 매핑
+            check_count = conn.execute(text("SELECT COUNT(*) FROM fair_judge_buman")).scalar() or 0
+            if check_count == 0:
+                conn.execute(text("""
+                    INSERT IGNORE INTO fair_judge_buman (fjb_fb_id, fjb_fj_id)
+                    SELECT b.fb_id, j.fj_id
+                    FROM fair_buman b
+                    JOIN fair_judge j ON b.fb_fg_id = j.fj_fg_id
+                """))
+            conn.commit()
+            print("✅ [DB Schema Init] fair_judge_buman 테이블 스키마 및 초기 마이그레이션이 완료되었습니다.")
+
+    except Exception as ex:
+        print(f"⚠️ [DB Schema Init Error] 스키마 마이그레이션 중 오류 (기존 DB 상태에 따라 무시 가능): {ex}")
+
+@app.on_event("startup")
+def on_startup():
+    init_db_schema()
+
 
 @app.get("/")
 def read_root():
