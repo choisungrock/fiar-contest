@@ -3586,10 +3586,10 @@ function App() {
                         try {
                           const wb = XLSX.utils.book_new();
 
-                          // 1. 종합 순위 집계 시트 작성
-                          const summaryHeaders = ["제품분류코드", "제품명", ...judges.map(j => `${j.name}(${j.affiliation})`), "원점수합", "최종합계", "순위"];
+                          // 1. 종합 순위 집계 시트 작성 (지정 심사위원 전용 bumanJudges 반영)
+                          const summaryHeaders = ["제품분류코드", "제품명", ...bumanJudges.map(j => `${j.name}(${j.affiliation})`), "원점수합", "최종합계", "순위"];
                           const summaryRows = matrixList.map((m, mIdx) => {
-                            const scoresList = judges.map((_, jIdx) => {
+                            const scoresList = bumanJudges.map((_, jIdx) => {
                               return getJudgeDetailedScores(mIdx, jIdx, products[rbk][mIdx]).totalConverted;
                             });
                             return [
@@ -3694,11 +3694,14 @@ function App() {
 
                             const wsJudge = XLSX.utils.aoa_to_sheet(sheetRows);
                             wsJudge['!merges'] = merges;
-                            const safeSheetName = sheet.judgeName.substring(0, 25) + " 평가";
+                            const safeSheetName = (sheet.judgeName || '심사위원').substring(0, 25) + " 평가";
                             XLSX.utils.book_append_sheet(wb, wsJudge, safeSheetName);
                           });
 
-                          XLSX.writeFile(wb, `KRiceFesta_${rbk}_부문_심사집계결과.xlsx`);
+                          // 동적 파일명 생성: 대회 전용 식별 키_부문_심사집계결과.xlsx
+                          const contestKey = systemCode || activeGroupObj?.code || systemName || '품평회';
+                          const bumanNameStr = bumanObj?.name ? `${bumanObj.name}(${rbk})` : `${rbk}부문`;
+                          XLSX.writeFile(wb, `${contestKey}_${bumanNameStr}_심사집계결과.xlsx`);
                           showToast('다중 시트 엑셀 파일이 정상 다운로드되었습니다.');
                         } catch (err) {
                           console.error("엑셀 내보내기 실패:", err);
@@ -3709,6 +3712,7 @@ function App() {
                     >
                       엑셀 내려받기
                     </button>
+
                     <button
                       onClick={handlePublish}
                       className="h-[48px] px-6 border-none bg-primary text-white rounded-[10px] text-[14px] font-extrabold cursor-pointer hover:bg-secondary transition-all shadow-sm"
