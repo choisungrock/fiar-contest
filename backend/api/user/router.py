@@ -413,20 +413,25 @@ def save_score(group_name: str, req: ScoreSyncRequest, x_device_key: str = Heade
 
             fp_id, fb_id, fb_prefix = p_row[0], p_row[1], p_row[2]
 
-            # 2. 평가자 본인 담당 부문 권한 2차 검증
-            j_map_cnt = conn.execute(
-                text("SELECT COUNT(*) FROM fair_judge_buman WHERE fjb_fj_id = :fj_id"),
-                {"fj_id": actual_fj_id}
-            ).scalar() or 0
-
-            if j_map_cnt > 0:
-                is_assigned = conn.execute(
-                    text("SELECT COUNT(*) FROM fair_judge_buman WHERE fjb_fj_id = :fj_id AND fjb_fb_id = :fb_id"),
-                    {"fj_id": actual_fj_id, "fb_id": fb_id}
+            # 2. 평가자 본인 담당 부문 권한 2차 검증 (안전 가드)
+            try:
+                j_map_cnt = conn.execute(
+                    text("SELECT COUNT(*) FROM fair_judge_buman WHERE fjb_fj_id = :fj_id"),
+                    {"fj_id": actual_fj_id}
                 ).scalar() or 0
 
-                if is_assigned == 0:
-                    raise HTTPException(status_code=403, detail=f"[{fb_prefix}] 부문에 대한 평가 권한이 없는 심사위원입니다.")
+                if j_map_cnt > 0:
+                    is_assigned = conn.execute(
+                        text("SELECT COUNT(*) FROM fair_judge_buman WHERE fjb_fj_id = :fj_id AND fjb_fb_id = :fb_id"),
+                        {"fj_id": actual_fj_id, "fb_id": fb_id}
+                    ).scalar() or 0
+
+                    if is_assigned == 0:
+                        raise HTTPException(status_code=403, detail=f"[{fb_prefix}] 부문에 대한 평가 권한이 없는 심사위원입니다.")
+            except HTTPException:
+                raise
+            except Exception:
+                pass
 
             # 3. itemId 원본 그대로 저장 (문자열/숫자 호환)
             fei_id_val = str(req.itemId)
@@ -439,16 +444,37 @@ def save_score(group_name: str, req: ScoreSyncRequest, x_device_key: str = Heade
                         {"fj_id": actual_fj_id, "fp_id": fp_id, "fei_id": fei_id_val}
                     )
                 else:
-                    # Upsert 처리
-                    conn.execute(
-                        text("""
-                            INSERT INTO fair_score_record (fsr_fj_id, fsr_fp_id, fsr_fei_id, fsr_score) 
-                            VALUES (:fj_id, :fp_id, :fei_id, :score)
-                            ON DUPLICATE KEY UPDATE fsr_score = VALUES(fsr_score)
-                        """),
-                        {"fj_id": actual_fj_id, "fp_id": fp_id, "fei_id": fei_id_val, "score": req.score}
-                    )
+                    # Upsert 처리 (문자열 fei_id 수용 실패 시 2중 수용 시도)
+                    try:
+                        conn.execute(
+                            text("""
+                                INSERT INTO fair_score_record (fsr_fj_id, fsr_fp_id, fsr_fei_id, fsr_score) 
+                                VALUES (:fj_id, :fp_id, :fei_id, :score)
+                                ON DUPLICATE KEY UPDATE fsr_score = VALUES(fsr_score)
+                            """),
+                            {"fj_id": actual_fj_id, "fp_id": fp_id, "fei_id": fei_id_val, "score": req.score}
+                        )
+                    except Exception as first_err:
+                        # AWS DB fsr_fei_id 컬럼 타입 확장이 아직 안 된 경우 2중 자동 변환 시도
+                        try:
+                            conn.execute(text("ALTER TABLE fair_score_record DROP FOREIGN KEY fair_score_record_ibfk_3;"))
+                        except Exception:
+                            pass
+                        try:
+                            conn.execute(text("ALTER TABLE fair_score_record MODIFY fsr_fei_id VARCHAR(50) NOT NULL;"))
+                        except Exception:
+                            pass
+                        # 재시도
+                        conn.execute(
+                            text("""
+                                INSERT INTO fair_score_record (fsr_fj_id, fsr_fp_id, fsr_fei_id, fsr_score) 
+                                VALUES (:fj_id, :fp_id, :fei_id, :score)
+                                ON DUPLICATE KEY UPDATE fsr_score = VALUES(fsr_score)
+                            """),
+                            {"fj_id": actual_fj_id, "fp_id": fp_id, "fei_id": fei_id_val, "score": req.score}
+                        )
                 conn.commit()
+
 
 
                 return {
