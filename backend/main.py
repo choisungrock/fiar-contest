@@ -189,6 +189,17 @@ def init_db_schema():
 def on_startup():
     init_db_schema()
 
+# 앱 로딩 시 즉시 DB 스키마 검증 및 생성 강제 실행
+init_db_schema()
+
+@app.get("/api/system/init-schema")
+def trigger_db_schema_init():
+    """DB 스키마 마이그레이션을 즉시 수동 실행하는 관리용 API"""
+    try:
+        init_db_schema()
+        return {"status": "success", "message": "fair_judge_buman 테이블 스키마 검증 및 마이그레이션이 완료되었습니다."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 def read_root():
@@ -197,6 +208,7 @@ def read_root():
         "status": "healthy",
         "message": "K-라이스페스타 품평회 평가 API 서버가 정상 동작 중입니다."
     }
+
 
 @app.get("/db-check")
 def check_db_connection():
