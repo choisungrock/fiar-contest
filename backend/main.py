@@ -131,9 +131,10 @@ def init_db_schema():
     """서버 시작 시 필요 신규 테이블 및 마이그레이션 자동 실행 (운영 서버 deploy.sh 실행 시 자동 처리)"""
     if not engine:
         return
+    
+    # 1. fair_judge_buman 매핑 테이블 독립 자동 생성
     try:
-        with engine.begin() as conn:
-            # 1. fair_judge_buman 매핑 테이블 자동 생성
+        with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS fair_judge_buman (
                   fjb_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -144,34 +145,44 @@ def init_db_schema():
                   UNIQUE KEY uq_fjb (fjb_fb_id, fjb_fj_id)
                 ) ENGINE=InnoDB;
             """))
+            conn.commit()
+            print("✅ [DB Schema Init] fair_judge_buman 테이블 생성 완료")
+    except Exception as ex1:
+        print(f"⚠️ [DB Schema Init] fair_judge_buman 생성 알림: {ex1}")
 
-            # 2. fair_score_record 컬럼 타입 VARCHAR(50) 지원 변경
+    # 2. fair_score_record 컬럼 타입 VARCHAR(50) 지원 변경 (독립 수행)
+    try:
+        with engine.connect() as conn:
             try:
                 conn.execute(text("ALTER TABLE fair_score_record DROP FOREIGN KEY fair_score_record_ibfk_3;"))
+                conn.commit()
             except Exception:
                 pass
             try:
                 conn.execute(text("ALTER TABLE fair_score_record MODIFY fsr_fei_id VARCHAR(50) NOT NULL;"))
+                conn.commit()
             except Exception as alter_ex:
                 print(f"fsr_fei_id ALTER NOTICE: {alter_ex}")
+    except Exception as ex2:
+        print(f"⚠️ [DB Schema Init] score record alter 알림: {ex2}")
 
-            # 3. 기존 DB 운영 환경인 경우: 매핑 정보가 없으면 기존 심사위원들을 백필 매핑
-            try:
-                check_count = conn.execute(text("SELECT COUNT(*) FROM fair_judge_buman")).scalar() or 0
-                if check_count == 0:
-                    conn.execute(text("""
-                        INSERT IGNORE INTO fair_judge_buman (fjb_fb_id, fjb_fj_id)
-                        SELECT b.fb_id, j.fj_id
-                        FROM fair_buman b
-                        JOIN fair_judge j ON b.fb_fg_id = j.fj_fg_id
-                    """))
-            except Exception as b_ex:
-                print(f"backfill NOTICE: {b_ex}")
+    # 3. 기존 심사위원 백필 매핑 (독립 수행)
+    try:
+        with engine.connect() as conn:
+            check_count = conn.execute(text("SELECT COUNT(*) FROM fair_judge_buman")).scalar() or 0
+            if check_count == 0:
+                conn.execute(text("""
+                    INSERT IGNORE INTO fair_judge_buman (fjb_fb_id, fjb_fj_id)
+                    SELECT b.fb_id, j.fj_id
+                    FROM fair_buman b
+                    JOIN fair_judge j ON b.fb_fg_id = j.fj_fg_id
+                """))
+                conn.commit()
+    except Exception as b_ex:
+        print(f"backfill NOTICE: {b_ex}")
 
-            print("✅ [DB Schema Init] fair_judge_buman 테이블 스키마 및 초기 마이그레이션이 완료되었습니다.")
+    print("✅ [DB Schema Init] 초기 마이그레이션 확인 완료")
 
-    except Exception as ex:
-        print(f"⚠️ [DB Schema Init Error] 스키마 마이그레이션 중 오류 (기존 DB 상태에 따라 무시 가능): {ex}")
 
 
 @app.on_event("startup")
