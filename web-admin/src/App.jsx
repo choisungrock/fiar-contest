@@ -3078,13 +3078,11 @@ function App() {
                     let gRawScore = 0;
                     const gItems = g.items || [];
 
-                    let allRawKeys = Object.keys(pScores);
-                    gItems.forEach((it, itIdx) => {
+                    gItems.forEach((it) => {
                       let val = 0;
                       if (pScores[String(it.id)] !== undefined) val = pScores[String(it.id)];
                       else if (pScores[it.id] !== undefined) val = pScores[it.id];
                       else if (pScores[it.name] !== undefined) val = pScores[it.name];
-                      else if (allRawKeys[itIdx] !== undefined) val = pScores[allRawKeys[itIdx]];
 
                       const numVal = Number(val) || 0;
                       itemScoresMap[it.id] = numVal;
@@ -3146,41 +3144,50 @@ function App() {
                   return getJudgeDetailedScores(pIdx, jIdx, p);
                 });
 
-                const listScores = judgeDetails.map(d => d.totalConverted);
-                const validScores = judgeDetails.filter(d => d.hasScores).map(d => d.totalConverted);
+                const listConverted = judgeDetails.map(d => d.totalConverted);
+                const listRaw = judgeDetails.map(d => d.totalRaw);
+                const validConverted = judgeDetails.filter(d => d.hasScores).map(d => d.totalConverted);
 
-                // 합계 연산
-                const rawTotal = listScores.reduce((sum, v) => sum + v, 0);
+                // 1. 순수 원점수의 합계 (환산 적용 전 raw score들의 합계)
+                const trueRawTotal = listRaw.reduce((sum, v) => sum + v, 0);
+
+                // 2. 환산점수 합계 및 평균 연산
+                const convertedSum = listConverted.reduce((sum, v) => sum + v, 0);
+                const validCount = validConverted.length;
 
                 // 최고/최저 제외 연산 (실제 채점한 사람이 3명 이상일 때만 동작하도록 통제)
-                const canTrimReal = canTrim && (validScores.length >= 3);
-                let finalTotal = rawTotal;
+                const canTrimReal = canTrim && (validConverted.length >= 3);
+                let finalTotal = convertedSum;
                 let minIdx = -1;
                 let maxIdx = -1;
 
                 if (canTrimReal) {
-                  const sorted = [...validScores].sort((a, b) => a - b);
+                  const sorted = [...validConverted].sort((a, b) => a - b);
                   const minVal = sorted[0];
                   const maxVal = sorted[sorted.length - 1];
 
-                  minIdx = listScores.indexOf(minVal);
-                  maxIdx = listScores.lastIndexOf(maxVal); // 동일 점수 시 분류
+                  minIdx = listConverted.indexOf(minVal);
+                  maxIdx = listConverted.lastIndexOf(maxVal); // 동일 점수 시 분류
 
-                  finalTotal = rawTotal - minVal - maxVal;
+                  finalTotal = convertedSum - minVal - maxVal;
                 } else {
-                  finalTotal = rawTotal;
+                  finalTotal = convertedSum;
                 }
+
+                const finalCount = canTrimReal ? Math.max(1, validCount - 2) : Math.max(1, validCount);
+                const finalAvg = validCount > 0 ? Math.round((finalTotal / finalCount) * 100) / 100 : 0;
 
                 return {
                   code: p.code,
                   name: p.name || '블라인드 제품',
-                  scores: listScores.map((v, idx) => ({
+                  scores: listConverted.map((v, idx) => ({
                     val: v,
-                    isMin: idx === minIdx && canTrim,
-                    isMax: idx === maxIdx && canTrim
+                    isMin: idx === minIdx && canTrimReal,
+                    isMax: idx === maxIdx && canTrimReal
                   })),
-                  total: rawTotal,
-                  finalTotal
+                  rawTotal: trueRawTotal,
+                  finalTotal: Math.round(finalTotal * 10) / 10,
+                  finalAvg
                 };
               });
 
@@ -3331,7 +3338,10 @@ function App() {
                                 원점수합
                               </th>
                               <th className="bg-[#8a6a1e] text-white p-3 font-extrabold text-center min-w-[90px]">
-                                최종합계<br />(최고/최저 제외)
+                                환산점수합<br />(최고/최저 제외)
+                              </th>
+                              <th className="bg-[#a67c1e] text-white p-3 font-extrabold text-center min-w-[95px]">
+                                환산점수평균<br />(최고/최저 제외)
                               </th>
                               <th className="bg-[#1b2a4a] text-white p-3 font-extrabold text-center min-w-[64px]">
                                 순위
@@ -3359,20 +3369,9 @@ function App() {
                                     // 이 심사위원의 해당 제품의 최종 환산 점수를 구함
                                     const detailed = getJudgeDetailedScores(idx, jIdx, products[rbk][idx]);
                                     const scoreVal = detailed.totalConverted;
-
-                                    // 최고/최저 점수 마크 판정용 임시 탐색
-                                    const allScores = bumanJudges.map((_, tmpIdx) => getJudgeDetailedScores(idx, tmpIdx, products[rbk][idx]).totalConverted);
-                                    let isMin = false;
-                                    let isMax = false;
-                                    if (canTrim) {
-                                      const sorted = [...allScores].sort((a, b) => a - b);
-                                      const minVal = sorted[0];
-                                      const maxVal = sorted[sorted.length - 1];
-                                      const minIdx = allScores.indexOf(minVal);
-                                      const maxIdx = allScores.lastIndexOf(maxVal);
-                                      isMin = jIdx === minIdx;
-                                      isMax = jIdx === maxIdx;
-                                    }
+                                    const scoreObj = m.scores[jIdx] || {};
+                                    const isMin = scoreObj.isMin;
+                                    const isMax = scoreObj.isMax;
 
                                     return (
                                       <td
@@ -3393,11 +3392,15 @@ function App() {
 
                                   {/* 원점수합 */}
                                   <td className="p-3 text-center font-bold text-[#2f5a3a] bg-[#f1f7f1] border-l border-[#f2f4f8]">
-                                    {formatScore(m.total)}
+                                    {formatScore(m.rawTotal)}
                                   </td>
-                                  {/* 최종합계 */}
-                                  <td className="p-3 text-center font-extrabold text-[16px] text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#f2f4f8]">
+                                  {/* 환산점수합 */}
+                                  <td className="p-3 text-center font-extrabold text-[15px] text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#f2f4f8]">
                                     {formatScore(m.finalTotal)}
+                                  </td>
+                                  {/* 환산점수평균 */}
+                                  <td className="p-3 text-center font-extrabold text-[16px] text-[#8a6a1e] bg-[#f8ebd0] border-l border-[#f2f4f8]">
+                                    {formatScore(m.finalAvg)}
                                   </td>
                                   {/* 순위 */}
                                   <td className="p-3 text-center bg-[#f4f6fb] border-l border-[#f2f4f8]">
@@ -3469,22 +3472,19 @@ function App() {
                                         {g.name}
                                       </th>
                                     )}
-                                    <th colSpan="1" rowSpan="2" className="bg-[#1f4a38] text-white p-2.5 font-extrabold text-center border-r border-[#285d47] min-w-[70px]">
-                                      배점합계
+                                    <th colSpan="1" rowSpan="2" className="bg-[#1f4a38] text-white p-2.5 font-extrabold text-center border-r border-[#285d47] min-w-[85px]">
+                                      평가배점합계
                                     </th>
-                                    <th colSpan="1" rowSpan="2" className="bg-[#8a6a1e] text-white p-2.5 font-extrabold text-center border-r border-[#9b7b2b] min-w-[70px]">
-                                      환산점수
+                                    <th colSpan="1" rowSpan="2" className="bg-[#8a6a1e] text-white p-2.5 font-extrabold text-center border-r border-[#9b7b2b] min-w-[85px]">
+                                      평가환산점수
                                     </th>
                                   </React.Fragment>
                                 );
                               })}
 
                               {/* 최종 합산 */}
-                              <th colSpan="1" rowSpan="2" className="bg-[#284c7d] text-white p-2.5 font-extrabold text-center border-r border-[#315b94] min-w-[75px]">
-                                배점합계
-                              </th>
-                              <th colSpan="1" rowSpan="2" className="bg-[#8a6a1e] text-white p-2.5 font-extrabold text-center border-r border-[#9b7b2b] min-w-[75px]">
-                                환산점수
+                              <th colSpan="1" rowSpan="2" className="bg-[#284c7d] text-white p-2.5 font-extrabold text-center border-r border-[#315b94] min-w-[90px]">
+                                최종배점합계
                               </th>
                               <th colSpan="1" rowSpan="2" className="bg-[#1b2a4a] text-white p-2.5 font-extrabold text-center border-r border-[#243a63] min-w-[100px]">
                                 최종환산합계
@@ -3532,11 +3532,11 @@ function App() {
                                             {r.detailed.itemScores[it.id] || 0}
                                           </td>
                                         ))}
-                                        {/* 배점합계 */}
+                                        {/* 평가배점합계 */}
                                         <td className="p-3 text-center font-bold text-[#1f4a38] bg-[#f1f7f1] border-l border-[#eef1f6]">
                                           {gScore ? gScore.rawSum : 0}
                                         </td>
-                                        {/* 환산점수 */}
+                                        {/* 평가환산점수 */}
                                         <td className="p-3 text-center font-extrabold text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#eef1f6]">
                                           {gScore ? gScore.converted : 0}
                                         </td>
@@ -3545,15 +3545,11 @@ function App() {
                                   })}
 
                                   {/* 최종합계 내역 */}
-                                  {/* 최종 배점합 */}
+                                  {/* 최종배점합계 */}
                                   <td className="p-3 text-center font-bold text-[#284c7d] bg-[#f0f4fa] border-l border-[#eef1f6]">
                                     {formatScore(r.detailed.totalRaw)}
                                   </td>
-                                  {/* 최종 환산점수 */}
-                                  <td className="p-3 text-center font-extrabold text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#eef1f6]">
-                                    {formatScore(r.detailed.totalConverted)}
-                                  </td>
-                                  {/* 최종 환산 합계 */}
+                                  {/* 최종환산합계 */}
                                   <td className="p-3 text-center font-extrabold text-[15px] text-[#1b2a4a] bg-[#eaeffa] border-l border-[#eef1f6]">
                                     {formatScore(r.detailed.totalConverted)}
                                   </td>
@@ -3587,7 +3583,7 @@ function App() {
                           const wb = XLSX.utils.book_new();
 
                           // 1. 종합 순위 집계 시트 작성 (지정 심사위원 전용 bumanJudges 반영)
-                          const summaryHeaders = ["제품분류코드", "제품명", ...bumanJudges.map(j => `${j.name}(${j.affiliation})`), "원점수합", "최종합계", "순위"];
+                          const summaryHeaders = ["제품분류코드", "제품명", ...bumanJudges.map(j => `${j.name}(${j.affiliation})`), "원점수합", "환산점수합", "환산점수평균", "순위"];
                           const summaryRows = matrixList.map((m, mIdx) => {
                             const scoresList = bumanJudges.map((_, jIdx) => {
                               return getJudgeDetailedScores(mIdx, jIdx, products[rbk][mIdx]).totalConverted;
@@ -3596,8 +3592,9 @@ function App() {
                               m.code,
                               m.name,
                               ...scoresList,
-                              m.total,
+                              m.rawTotal,
                               m.finalTotal,
+                              m.finalAvg,
                               rankMap[m.code]
                             ];
                           });
@@ -3622,11 +3619,11 @@ function App() {
                                     row2.push(it.name);
                                   });
                                 }
-                                row1.push("배점합계", "환산점수");
+                                row1.push("평가배점합계", "평가환산점수");
                                 row2.push("", "");
                               });
                             }
-                            row1.push("배점합계", "환산점수", "최종환산합계", "순위");
+                            row1.push("최종배점합계", "최종환산합계", "순위");
                             row2.push("", "", "", "");
 
                             const sheetRows = [row1, row2];
@@ -3648,7 +3645,6 @@ function App() {
 
                               dataRow.push(
                                 r.detailed.totalRaw,
-                                r.detailed.totalConverted,
                                 r.detailed.totalConverted,
                                 r.rank
                               );
@@ -3682,9 +3678,7 @@ function App() {
                               });
                             }
 
-                            // 최종 배점합계, 환산점수, 최종환산합계, 순위 2행 세로 병합
-                            merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
-                            colIdx += 1;
+                            // 최종배점합계, 최종환산합계, 순위 2행 세로 병합
                             merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
                             colIdx += 1;
                             merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });

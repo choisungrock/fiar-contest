@@ -526,6 +526,13 @@ function App() {
       alert('먼저 평가자 성명 확인 버튼을 눌러 평가자 정보를 검증해 주세요.');
       return;
     }
+    const visibleBumans = (assignedPrefixes !== null && Array.isArray(assignedPrefixes))
+      ? bumans.filter(b => assignedPrefixes.includes(b.prefix))
+      : bumans;
+    if (visibleBumans.length === 0 || !selectedBuman) {
+      alert('배정된 평가 부문이 없습니다. 관리자에게 평가 부문 배정을 요청해 주세요.');
+      return;
+    }
     await enterEval(judgeName.trim(), verifyLoginData.judgeId, verifyLoginData.scores, true);
   };
 
@@ -932,36 +939,41 @@ function App() {
                         );
                       }
 
+                      const selectedObj = visibleBumans.find(b => b.key === selectedBuman) || visibleBumans[0];
+                      const bumanLabel = selectedObj ? (selectedObj.name ? `${selectedObj.prefix} ${selectedObj.name}` : selectedObj.prefix) : selectedBuman;
+
                       return (
-                        <div className="grid grid-cols-3 gap-[10px] mt-[10px]">
-                          {visibleBumans.map((item) => (
-                            <button
-                              key={item.key}
-                              type="button"
-                              onClick={() => setSelectedBuman(item.key)}
-                              className={`h-[84px] w-full px-[8px] rounded-[12px] flex flex-col items-center justify-center text-center border-2 transition-all cursor-pointer ${
-                                selectedBuman === item.key
-                                  ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
-                                  : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
-                              }`}
-                            >
-                              <div className="text-[22px] font-extrabold leading-none">{item.prefix}</div>
-                              <div className="text-[13px] font-semibold mt-[4px] leading-none">{item.name}</div>
-                            </button>
-                          ))}
-                        </div>
+                        <>
+                          <div className="grid grid-cols-3 gap-[10px] mt-[10px]">
+                            {visibleBumans.map((item) => (
+                              <button
+                                key={item.key}
+                                type="button"
+                                onClick={() => setSelectedBuman(item.key)}
+                                className={`h-[84px] w-full px-[8px] rounded-[12px] flex flex-col items-center justify-center text-center border-2 transition-all cursor-pointer ${
+                                  selectedBuman === item.key
+                                    ? 'border-[#1b2a4a] bg-[#1b2a4a] text-white shadow-[0_6px_18px_rgba(27,42,74,0.22)]'
+                                    : 'border-[#e2e7ef] bg-white text-textSub hover:border-gray-300 shadow-none'
+                                }`}
+                              >
+                                <div className="text-[22px] font-extrabold leading-none">{item.prefix}</div>
+                                <div className="text-[13px] font-semibold mt-[4px] leading-none">{item.name}</div>
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* 평가 시작하기 버튼 */}
+                          <button
+                            type="submit"
+                            disabled={!judgeName.trim() || !selectedBuman}
+                            className="w-full h-[56px] rounded-[12px] text-[18px] mt-[32px] bg-[#1b2a4a] hover:bg-[#243a63] text-white font-extrabold shadow-lg hover:shadow-xl cursor-pointer transition-all flex items-center justify-center gap-2"
+                          >
+                            <span>[{bumanLabel}] 부문 평가 시작하기</span>
+                            <span>→</span>
+                          </button>
+                        </>
                       );
                     })()}
-
-                    {/* 평가 시작하기 버튼 */}
-                    <button
-                      type="submit"
-                      disabled={!judgeName.trim()}
-                      className="w-full h-[56px] rounded-[12px] text-[18px] mt-[32px] bg-[#1b2a4a] hover:bg-[#243a63] text-white font-extrabold shadow-lg hover:shadow-xl cursor-pointer transition-all flex items-center justify-center gap-2"
-                    >
-                      <span>[{selectedBuman}] 부문 평가 시작하기</span>
-                      <span>→</span>
-                    </button>
                   </div>
                 ) : (
                   <div className="mt-[28px] p-5 rounded-[12px] bg-slate-50 border border-slate-200 text-center">
