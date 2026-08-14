@@ -39,6 +39,9 @@ export async function saveScoreCell(row) {
   // row: { groupName, judgeName, judgeId, bumanKey, productCode, itemId, score, syncStatus }
   await db.scores.put(row);
 }
+export async function getScoreCell({ groupName, judgeName, bumanKey, productCode, itemId }) {
+  return await db.scores.get([groupName, judgeName, bumanKey, productCode, itemId]);
+}
 export async function deleteScoreCell({ groupName, judgeName, bumanKey, productCode, itemId }) {
   await db.scores.delete([groupName, judgeName, bumanKey, productCode, itemId]);
 }

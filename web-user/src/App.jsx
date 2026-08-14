@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   cacheInit, getCachedInit,
   saveSession, getSession,
-  saveScoreCell, deleteScoreCell, loadJudgeScores,
+  saveScoreCell, getScoreCell, deleteScoreCell, loadJudgeScores,
   getPendingCells, markCellSynced,
   getDeviceKey,
 } from './db';
@@ -109,6 +109,7 @@ function App() {
   const [isVerified, setIsVerified] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyLoginData, setVerifyLoginData] = useState(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
 
   // API 동적 데이터 바인딩 상태
@@ -173,22 +174,28 @@ function App() {
     }
   }, [selectedBuman, groupName]);
 
-  // 점수가 변경되거나 마운트 시 로컬의 미동기화(pending) 점수를 3초 간격으로 자동 백엔드 DB 동기화
+  // 점수가 변경되거나 마운트 시 로컬의 미동기화(pending) 점수를 2초 간격으로 자동 백엔드 DB 동기화 및 미전송 개수 추적
   useEffect(() => {
     const nm = judgeName.trim();
-    if (!nm) return;
+    if (!nm || !groupName) return;
 
-    const doSync = () => {
+    const doSyncAndCheck = async () => {
       let activeJid = judgeId;
       if (!activeJid && judges.length > 0) {
         const matchJ = judges.find(j => j.name === nm);
         if (matchJ) activeJid = matchJ.id;
       }
-      syncPending(nm, activeJid);
+      await syncPending(nm, activeJid);
+      try {
+        const pendingCells = await getPendingCells(groupName, nm);
+        setPendingCount(pendingCells.length);
+      } catch (e) {
+        /* noop */
+      }
     };
 
-    doSync();
-    const timer = setInterval(doSync, 3000);
+    doSyncAndCheck();
+    const timer = setInterval(doSyncAndCheck, 2000);
     return () => clearInterval(timer);
   }, [judgeId, judgeName, judges, groupName, deviceKey, authKey, scores]);
 
@@ -343,10 +350,8 @@ function App() {
           });
           if (res.ok) {
             await markCellSynced(cell);
-          } else if (res.status === 404 || res.status === 403) {
-            // 더 이상 존재하지 않거나 무효한 불유효 셀은 로컬 DB에서 자동 정제 삭제
-            await deleteScoreCell(cell);
           } else {
+            // 어떤 서버 응답 실패(403/404 등)가 있더라도 로컬 점수를 절대로 삭제하지 않고 pending 유지
             break;
           }
 
@@ -364,12 +369,15 @@ function App() {
   const enterEval = async (name, jid, serverScores, isOnline) => {
     setJudgeId(jid);
     await saveSession(groupName, { judgeName: name, judgeId: jid });
-    // 온라인 로그인 시 서버 복원 점수를 로컬(synced)로 반영
+    // 온라인 로그인 시 서버 복원 점수는 로컬에 없을 때만 보충 (태블릿 평가앱 로컬 점수 100% 보존)
     if (isOnline && serverScores) {
       for (const bk of Object.keys(serverScores)) {
         for (const code of Object.keys(serverScores[bk])) {
           for (const itemId of Object.keys(serverScores[bk][code])) {
-            await saveScoreCell({ groupName, judgeName: name, judgeId: jid, bumanKey: bk, productCode: code, itemId, score: serverScores[bk][code][itemId], syncStatus: 'synced' });
+            const existingCell = await getScoreCell({ groupName, judgeName: name, bumanKey: bk, productCode: code, itemId });
+            if (!existingCell) {
+              await saveScoreCell({ groupName, judgeName: name, judgeId: jid, bumanKey: bk, productCode: code, itemId, score: serverScores[bk][code][itemId], syncStatus: 'synced' });
+            }
           }
         }
       }
@@ -1036,6 +1044,27 @@ function App() {
                 {judgeName}
               </span>
             </div>
+
+            {/* 실시간 서버 전송 상태 배지 */}
+            <button
+              type="button"
+              onClick={() => {
+                if (judgeName) syncPending(judgeName.trim(), judgeId);
+              }}
+              title={pendingCount === 0 ? "서버와 100% 실시간 동기화되었습니다." : "클릭 시 미전송 점수를 즉시 서버로 재전송합니다."}
+              className={`flex items-center gap-1.5 py-[6px] px-[12px] rounded-[10px] text-[13px] font-extrabold transition-all cursor-pointer shrink-0 border select-none ${
+                pendingCount === 0
+                  ? 'bg-[#133827] text-[#52c41a] border-[#20523a]'
+                  : 'bg-[#433113] text-[#faad14] border-[#664d1d] animate-pulse'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${pendingCount === 0 ? 'bg-[#52c41a]' : 'bg-[#faad14]'}`}></span>
+              {pendingCount === 0 ? (
+                <span>🟢 서버 전송 완료</span>
+              ) : (
+                <span>⚠️ 미전송 {pendingCount}건 (터치 시 재전송)</span>
+              )}
+            </button>
             
             {/* 입력 진행 지표 */}
             <div className="text-right px-[4px] shrink-0">
