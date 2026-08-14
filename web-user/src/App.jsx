@@ -10,11 +10,28 @@ import {
 
 // API Base URL 자동 인젝션용 fetch 랩핑
 const originalFetch = window.fetch;
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.trim() !== '' && !envUrl.includes('localhost')) {
+    return envUrl.replace(/\/$/, "");
+  }
+  if (typeof window !== 'undefined' && window.location) {
+    const hostname = window.location.hostname;
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      if (hostname.includes('ricecontest.com')) {
+        return "https://api.ricecontest.com/api";
+      }
+      return `${window.location.protocol}//${hostname}:18000/api`;
+    }
+  }
+  return (envUrl || "http://localhost:18000/api").replace(/\/$/, "");
+};
+
 window.fetch = async (input, init) => {
   let url = typeof input === 'string' ? input : input.url;
   
   const backendBase = "http://localhost:18000/api";
-  const configuredBase = (import.meta.env.VITE_API_URL || backendBase).replace(/\/$/, "");
+  const configuredBase = getApiBaseUrl();
   
   if (url.startsWith(backendBase)) {
     url = url.replace(backendBase, configuredBase);
