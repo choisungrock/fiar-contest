@@ -9,11 +9,13 @@ from api.admin.router import router as admin_router
 from api.user.router import router as user_router
 
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from typing import Optional
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.openapi.utils import get_openapi
 
 app = FastAPI(title="K-Rice Festa Evaluation System API", docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ALLOWED_ORIGINS 환경 변수 파싱 및 보정
 origins_env = os.getenv("ALLOWED_ORIGINS", "")

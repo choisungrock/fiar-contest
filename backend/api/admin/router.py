@@ -195,56 +195,36 @@ def get_groups(x_admin_username: Optional[str] = Header(None)):
                 g_status = row[3]
                 g_code = row[4]
                 
-                # 부문, 평가자, 제품 갯수 카운트
-                buman_count = conn.execute(text("SELECT COUNT(*) FROM fair_buman WHERE fb_fg_id = :fg_id"), {"fg_id": g_id}).scalar() or 0
-                judge_count = conn.execute(text("SELECT COUNT(*) FROM fair_judge WHERE fj_fg_id = :fg_id"), {"fg_id": g_id}).scalar() or 0
-                product_count = conn.execute(text(
-                    "SELECT COUNT(*) FROM fair_product p JOIN fair_buman b ON p.fp_fb_id = b.fb_id WHERE b.fb_fg_id = :fg_id"
-                ), {"fg_id": g_id}).scalar() or 0
+                # 부문, 평가자, 제품 갯수 및 채점 수 일괄 카운트 (성능 최적화)
+                counts = conn.execute(text("""
+                    SELECT 
+                        (SELECT COUNT(*) FROM fair_buman WHERE fb_fg_id = :fg_id) as b_cnt,
+                        (SELECT COUNT(*) FROM fair_judge WHERE fj_fg_id = :fg_id) as j_cnt,
+                        (SELECT COUNT(*) FROM fair_product p JOIN fair_buman b ON p.fp_fb_id = b.fb_id WHERE b.fb_fg_id = :fg_id) as p_cnt,
+                        (SELECT COUNT(*) FROM fair_score_record r JOIN fair_product p ON r.fsr_fp_id = p.fp_id JOIN fair_buman b ON p.fp_fb_id = b.fb_id WHERE b.fb_fg_id = :fg_id) as filled_cnt
+                """), {"fg_id": g_id}).first()
                 
-                # 실시간 진행률 연산
-                total_template_items = 0
-                buman_rows = conn.execute(
-                    text("SELECT fb_id, fb_type FROM fair_buman WHERE fb_fg_id = :fg_id"), 
-                    {"fg_id": g_id}
-                ).all()
+                buman_count = counts[0] if counts else 0
+                judge_count = counts[1] if counts else 0
+                product_count = counts[2] if counts else 0
+                actual_filled_cells = counts[3] if counts else 0
                 
-                for b_row in buman_rows:
-                    fb_id, fb_type = b_row[0], b_row[1]
-                    fet_id = conn.execute(
-                        text("SELECT fet_id FROM fair_evaluation_template WHERE fet_fg_id = :fg_id AND fet_target_type = 'specific_buman' AND fet_target_id = :fb_id"),
-                        {"fg_id": g_id, "fb_id": fb_id}
-                    ).scalar()
-                    
-                    if not fet_id:
-                        target_type = "open_all" if fb_type == "open" else "blind_all"
-                        fet_id = conn.execute(
-                            text("SELECT fet_id FROM fair_evaluation_template WHERE fet_fg_id = :fg_id AND fet_target_type = :target_type"),
-                            {"fg_id": g_id, "target_type": target_type}
-                        ).scalar()
-                        
-                    if fet_id:
-                        item_count = conn.execute(
-                            text("SELECT COUNT(*) FROM fair_evaluation_item WHERE fei_fet_id = :fet_id"),
-                            {"fet_id": fet_id}
-                        ).scalar() or 0
-                        p_count = conn.execute(
-                            text("SELECT COUNT(*) FROM fair_product WHERE fp_fb_id = :fb_id"),
-                            {"fb_id": fb_id}
-                        ).scalar() or 0
-                        total_template_items += p_count * item_count
-                        
-                total_target_cells = total_template_items * judge_count
-                actual_filled_cells = conn.execute(
-                    text("""
-                        SELECT COUNT(*) FROM fair_score_record r
-                        JOIN fair_product p ON r.fsr_fp_id = p.fp_id
-                        JOIN fair_buman b ON p.fp_fb_id = b.fb_id
+                # 실시간 진행률 연산용 템플릿 총 셀 수 계산 (통합 쿼리)
+                total_template_items = conn.execute(text("""
+                    SELECT COALESCE(SUM(t.p_cnt * t.item_cnt), 0) FROM (
+                        SELECT 
+                            (SELECT COUNT(*) FROM fair_product WHERE fp_fb_id = b.fb_id) as p_cnt,
+                            (
+                                SELECT COUNT(*) FROM fair_evaluation_item i
+                                JOIN fair_evaluation_template t ON i.fei_fet_id = t.fet_id
+                                WHERE t.fet_fg_id = :fg_id AND (t.fet_target_id = b.fb_id OR (t.fet_target_type = IF(b.fb_type = 'open', 'open_all', 'blind_all') AND t.fet_target_id IS NULL))
+                            ) as item_cnt
+                        FROM fair_buman b
                         WHERE b.fb_fg_id = :fg_id
-                    """),
-                    {"fg_id": g_id}
-                ).scalar() or 0
+                    ) t
+                """), {"fg_id": g_id}).scalar() or 0
                 
+                total_target_cells = total_template_items * judge_count
                 progress = 0
                 if total_target_cells > 0:
                     progress = min(100, round((actual_filled_cells / total_target_cells) * 100))

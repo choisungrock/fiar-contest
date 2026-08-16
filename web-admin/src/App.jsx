@@ -286,7 +286,7 @@ function App() {
           headers["X-Admin-Username"] = parsed.username;
         }
       }
-      const response = await fetch("http://localhost:18000/api/admin/groups", { headers });
+      const response = await fetch("/api/admin/groups", { headers });
       if (response.ok) {
         const data = await response.json();
         if (data.status === "success" && data.groups) {
@@ -301,7 +301,7 @@ function App() {
   // 기기 목록 조회
   const fetchDevices = async (groupId) => {
     try {
-      const res = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/devices`);
+      const res = await fetch(`/api/admin/groups/${groupId}/devices`);
       if (res.ok) {
         const data = await res.json();
         setDevices(data.devices || []);
@@ -315,7 +315,7 @@ function App() {
   // 기기 상태 변경 (승인/대기/차단)
   const changeDeviceStatus = async (fdId, status) => {
     try {
-      const res = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/devices/${fdId}/status`, {
+      const res = await fetch(`/api/admin/groups/${activeGroup}/devices/${fdId}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
@@ -330,7 +330,7 @@ function App() {
   // 신규 기기 등록 잠금 토글
   const toggleEnroll = async (open) => {
     try {
-      const res = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/enroll`, {
+      const res = await fetch(`/api/admin/groups/${activeGroup}/enroll`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ open })
@@ -404,7 +404,7 @@ function App() {
           headers["X-Admin-Username"] = parsed.username;
         }
       }
-      const response = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/details`, { headers });
+      const response = await fetch(`/api/admin/groups/${groupId}/details`, { headers });
       if (response.status === 403) {
         alert("해당 대그룹에 대한 관리 권한이 없습니다.");
         setView('dashboard');
@@ -500,7 +500,7 @@ function App() {
           headers["X-Admin-Username"] = parsed.username;
         }
       }
-      const response = await fetch(`http://localhost:18000/api/admin/groups/${groupId}/results?_=${Date.now()}`, { headers });
+      const response = await fetch(`/api/admin/groups/${groupId}/results?_=${Date.now()}`, { headers });
       if (response.ok) {
         const data = await response.json();
         if (data.status === "success") {
@@ -590,7 +590,7 @@ function App() {
     e.preventDefault();
 
     try {
-      const response = await fetch("http://localhost:18000/api/admin/login", {
+      const response = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: email, password: password })
@@ -647,7 +647,7 @@ function App() {
           headers["X-Admin-Username"] = parsed.username;
         }
       }
-      const response = await fetch("http://localhost:18000/api/admin/admins", { headers });
+      const response = await fetch("/api/admin/admins", { headers });
       if (response.ok) {
         const data = await response.json();
         if (data.status === "success" && data.admins) {
@@ -740,7 +740,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(`http://localhost:18000/api/admin/admins/${adminId}`, {
+      const response = await fetch(`/api/admin/admins/${adminId}`, {
         method: "DELETE",
         headers
       });
@@ -770,7 +770,7 @@ function App() {
     const defaultCode = "fair_" + Date.now().toString(36);
 
     try {
-      const response = await fetch("http://localhost:18000/api/admin/groups", {
+      const response = await fetch("/api/admin/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1071,7 +1071,7 @@ function App() {
         judgeIds: Array.isArray(b.judgeIds) ? b.judgeIds : (judges || []).map(j => j.id)
       }));
 
-      const response = await fetch(`http://localhost:18000/api/admin/groups/${activeGroup}/save`, {
+      const response = await fetch(`/api/admin/groups/${activeGroup}/save`, {
         method: "POST",
         headers,
         body: JSON.stringify({

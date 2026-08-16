@@ -263,7 +263,7 @@ function App() {
       try { sess = await getSession(groupName); } catch (se) { /* noop */ }
       try {
         // 1) 기기 상태만 확인 (저장 안 함 — 등록 요청 전에는 서버에 쌓이지 않음)
-        const reg = await fetch(`http://localhost:18000/api/user/groups/${groupName}/device/status`, {
+        const reg = await fetch(`/api/user/groups/${groupName}/device/status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceKey: dk })
@@ -282,7 +282,7 @@ function App() {
           setAuthKey(rdata.authKey);
           await saveSession(groupName, { authKey: rdata.authKey, deviceStatus: 'approved' });
           // 2) 승인 기기만 대회 데이터 수신
-          const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/init`, {
+          const res = await fetch(`/api/user/groups/${groupName}/init`, {
             headers: { "X-Device-Key": dk, "X-Auth-Key": rdata.authKey }
           });
           if (res.ok) {
@@ -338,7 +338,7 @@ function App() {
       const pending = await getPendingCells(groupName, name);
       for (const cell of pending) {
         try {
-          const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
+          const res = await fetch(`/api/user/groups/${groupName}/score`, {
             method: "POST",
             headers: authHeaders(),
             body: JSON.stringify({
@@ -499,7 +499,7 @@ function App() {
     setIsVerifying(true);
     const name = judgeName.trim();
     try {
-      const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/login`, {
+      const res = await fetch(`/api/user/groups/${groupName}/login`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ judgeName: name })
@@ -568,7 +568,7 @@ function App() {
     if (!label) { alert('기기 이름을 입력해 주세요.'); return; }
     try {
       const dk = deviceKey || await getDeviceKey();
-      const reg = await fetch(`http://localhost:18000/api/user/groups/${groupName}/device/register`, {
+      const reg = await fetch(`/api/user/groups/${groupName}/device/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceKey: dk, label })
@@ -625,7 +625,7 @@ function App() {
     // 서버 실시간 동기화 시도 → 성공 시 synced
     if (activeJid) {
       try {
-        const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
+        const res = await fetch(`/api/user/groups/${groupName}/score`, {
           method: "POST",
           headers: authHeaders(),
           body: JSON.stringify({
@@ -671,7 +671,7 @@ function App() {
     // 서버 실시간 동기화 (삭제)
     if (activeJid) {
       try {
-        await fetch(`http://localhost:18000/api/user/groups/${groupName}/score`, {
+        await fetch(`/api/user/groups/${groupName}/score`, {
           method: "POST",
           headers: authHeaders(),
           body: JSON.stringify({
@@ -758,7 +758,7 @@ function App() {
     // 입력한 점수는 이미 로컬에 저장되어 있어 유실되지 않고, 연결 후 다시 제출하면 됨.
     try {
       await syncPending(judgeName.trim(), judgeId); // 미동기화 점수 먼저 전송
-      const res = await fetch(`http://localhost:18000/api/user/groups/${groupName}/complete`, {
+      const res = await fetch(`/api/user/groups/${groupName}/complete`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ judgeId, bumanPrefix: selectedBuman })
@@ -1048,11 +1048,26 @@ function App() {
             {/* 실시간 서버 전송 상태 배지 */}
             <button
               type="button"
-              onClick={() => {
-                if (judgeName) syncPending(judgeName.trim(), judgeId);
+              onClick={async () => {
+                if (judgeName) {
+                  const currentPending = pendingCount;
+                  if (currentPending > 0) {
+                    showToast(`🔄 미전송 점수 ${currentPending}건을 서버로 전송 시도합니다...`);
+                  } else {
+                    showToast('✓ 모든 점수가 서버와 100% 동기화된 상태입니다.');
+                  }
+                  await syncPending(judgeName.trim(), judgeId);
+                  try {
+                    const pendingCells = await getPendingCells(groupName, judgeName.trim());
+                    setPendingCount(pendingCells.length);
+                    if (pendingCells.length === 0 && currentPending > 0) {
+                      showToast('🟢 미전송 점수가 서버로 모두 성공적으로 전송되었습니다!');
+                    }
+                  } catch (e) { /* noop */ }
+                }
               }}
               title={pendingCount === 0 ? "서버와 100% 실시간 동기화되었습니다." : "클릭 시 미전송 점수를 즉시 서버로 재전송합니다."}
-              className={`flex items-center gap-1.5 py-[6px] px-[12px] rounded-[10px] text-[13px] font-extrabold transition-all cursor-pointer shrink-0 border select-none ${
+              className={`flex items-center gap-1.5 py-[6px] px-[12px] rounded-[10px] text-[13px] font-extrabold transition-all cursor-pointer shrink-0 border select-none active:scale-95 ${
                 pendingCount === 0
                   ? 'bg-[#133827] text-[#52c41a] border-[#20523a]'
                   : 'bg-[#433113] text-[#faad14] border-[#664d1d] animate-pulse'
@@ -1062,7 +1077,7 @@ function App() {
               {pendingCount === 0 ? (
                 <span>🟢 서버 전송 완료</span>
               ) : (
-                <span>⚠️ 미전송 {pendingCount}건 (터치 시 재전송)</span>
+                <span>⚠️ 미전송 {pendingCount}건</span>
               )}
             </button>
             
