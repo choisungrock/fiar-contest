@@ -124,7 +124,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://fair_user:fair_passwor
 
 # SQLAlchemy DB 엔진 초기화 및 스키마 자동 마이그레이션
 try:
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    engine = create_engine(DATABASE_URL, pool_size=20, max_overflow=30, pool_pre_ping=True, pool_recycle=3600)
 except Exception as e:
     engine = None
     print(f"데이터베이스 연결 설정 실패: {e}")

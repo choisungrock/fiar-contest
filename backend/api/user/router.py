@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, text
 router = APIRouter()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://fair_user:fair_password@db:3306/fair_db?charset=utf8mb4")
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(DATABASE_URL, pool_size=20, max_overflow=30, pool_pre_ping=True, pool_recycle=3600)
 
 # ---------- 기기 인증 공통 ----------
 def verify_device(conn, group_code, device_key, auth_key):
