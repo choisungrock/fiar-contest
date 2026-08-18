@@ -1,6 +1,6 @@
 // K-라이스페스타 전문가 품평회 관리자 콘솔 종합 애플리케이션 React 컴포넌트
 import React, { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 // API Base URL & Secret Header 자동 인젝션용 fetch 랩핑
 const originalFetch = window.fetch;
@@ -3617,6 +3617,155 @@ function App() {
                           });
                           const summaryData = [summaryHeaders, ...summaryRows];
                           const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+
+                          // 테두리 및 셀 스타일 정의
+                          const thinBorder = {
+                            top: { style: "thin", color: { rgb: "DDE3EC" } },
+                            bottom: { style: "thin", color: { rgb: "DDE3EC" } },
+                            left: { style: "thin", color: { rgb: "DDE3EC" } },
+                            right: { style: "thin", color: { rgb: "DDE3EC" } }
+                          };
+
+                          const headerStyle = {
+                            fill: { fgColor: { rgb: "1B2A4A" } },
+                            font: { color: { rgb: "FFFFFF" }, bold: true, name: "맑은 고딕", sz: 11 },
+                            alignment: { horizontal: "center", vertical: "center", wrapText: true },
+                            border: {
+                              top: { style: "thin", color: { rgb: "243A63" } },
+                              bottom: { style: "thin", color: { rgb: "243A63" } },
+                              left: { style: "thin", color: { rgb: "243A63" } },
+                              right: { style: "thin", color: { rgb: "243A63" } }
+                            }
+                          };
+
+                          const baseCellStyle = {
+                            font: { name: "맑은 고딕", sz: 10, color: { rgb: "3A475C" } },
+                            alignment: { horizontal: "center", vertical: "center" },
+                            border: thinBorder
+                          };
+
+                          // 최고점수: 푸른색 배경, 진한 파란색 글자 (관리자 화면과 동일)
+                          const maxScoreStyle = {
+                            fill: { fgColor: { rgb: "D0E1FD" } },
+                            font: { color: { rgb: "1A5276" }, bold: true, name: "맑은 고딕", sz: 10 },
+                            alignment: { horizontal: "center", vertical: "center" },
+                            border: thinBorder
+                          };
+
+                          // 최저점수: 붉은색 배경, 진한 빨간색 글자 (관리자 화면과 동일)
+                          const minScoreStyle = {
+                            fill: { fgColor: { rgb: "FFD2D2" } },
+                            font: { color: { rgb: "C0392B" }, bold: true, name: "맑은 고딕", sz: 10 },
+                            alignment: { horizontal: "center", vertical: "center" },
+                            border: thinBorder
+                          };
+
+                          const rawTotalStyle = {
+                            fill: { fgColor: { rgb: "F1F7F1" } },
+                            font: { color: { rgb: "2F5A3A" }, bold: true, name: "맑은 고딕", sz: 10 },
+                            alignment: { horizontal: "center", vertical: "center" },
+                            border: thinBorder
+                          };
+
+                          const finalTotalStyle = {
+                            fill: { fgColor: { rgb: "FBF4E2" } },
+                            font: { color: { rgb: "8A6A1E" }, bold: true, name: "맑은 고딕", sz: 10 },
+                            alignment: { horizontal: "center", vertical: "center" },
+                            border: thinBorder
+                          };
+
+                          const finalAvgStyle = {
+                            fill: { fgColor: { rgb: "F8EBD0" } },
+                            font: { color: { rgb: "8A6A1E" }, bold: true, name: "맑은 고딕", sz: 10 },
+                            alignment: { horizontal: "center", vertical: "center" },
+                            border: thinBorder
+                          };
+
+                          const rankStyle = {
+                            fill: { fgColor: { rgb: "F4F6FA" } },
+                            font: { color: { rgb: "1B2A4A" }, bold: true, name: "맑은 고딕", sz: 11 },
+                            alignment: { horizontal: "center", vertical: "center" },
+                            border: thinBorder
+                          };
+
+                          // 1-1. 헤더 셀 스타일 적용
+                          summaryHeaders.forEach((_, cIdx) => {
+                            const cellRef = XLSX.utils.encode_cell({ r: 0, c: cIdx });
+                            if (wsSummary[cellRef]) {
+                              wsSummary[cellRef].s = headerStyle;
+                            }
+                          });
+
+                          // 1-2. 데이터 행 스타일 및 최고/최저 점수 배경색 적용
+                          summaryRows.forEach((row, rIdx) => {
+                            const rowNum = rIdx + 1;
+                            const m = matrixList[rIdx];
+
+                            // 제품분류코드
+                            const codeRef = XLSX.utils.encode_cell({ r: rowNum, c: 0 });
+                            if (wsSummary[codeRef]) {
+                              wsSummary[codeRef].s = {
+                                ...baseCellStyle,
+                                font: { color: { rgb: "1B2A4A" }, bold: true, name: "맑은 고딕", sz: 10 }
+                              };
+                            }
+
+                            // 제품명
+                            const nameRef = XLSX.utils.encode_cell({ r: rowNum, c: 1 });
+                            if (wsSummary[nameRef]) {
+                              wsSummary[nameRef].s = {
+                                ...baseCellStyle,
+                                alignment: { horizontal: "left", vertical: "center" }
+                              };
+                            }
+
+                            // 심사위원별 점수 (최고점 붉은색, 최저점 푸른색 배경)
+                            bumanJudges.forEach((_, jIdx) => {
+                              const colNum = 2 + jIdx;
+                              const scoreCellRef = XLSX.utils.encode_cell({ r: rowNum, c: colNum });
+                              if (wsSummary[scoreCellRef]) {
+                                const scoreObj = m?.scores?.[jIdx] || {};
+                                if (scoreObj.isMax) {
+                                  wsSummary[scoreCellRef].s = maxScoreStyle;
+                                } else if (scoreObj.isMin) {
+                                  wsSummary[scoreCellRef].s = minScoreStyle;
+                                } else {
+                                  wsSummary[scoreCellRef].s = baseCellStyle;
+                                }
+                              }
+                            });
+
+                            const baseCol = 2 + bumanJudges.length;
+
+                            // 원점수합
+                            const rawRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol });
+                            if (wsSummary[rawRef]) wsSummary[rawRef].s = rawTotalStyle;
+
+                            // 환산점수합
+                            const finalTotRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol + 1 });
+                            if (wsSummary[finalTotRef]) wsSummary[finalTotRef].s = finalTotalStyle;
+
+                            // 환산점수평균
+                            const finalAvgRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol + 2 });
+                            if (wsSummary[finalAvgRef]) wsSummary[finalAvgRef].s = finalAvgStyle;
+
+                            // 순위
+                            const rankRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol + 3 });
+                            if (wsSummary[rankRef]) wsSummary[rankRef].s = rankStyle;
+                          });
+
+                          // 열 너비 설정
+                          const summaryColWidths = [
+                            { wch: 14 },
+                            { wch: 25 },
+                            ...bumanJudges.map(() => ({ wch: 18 })),
+                            { wch: 13 },
+                            { wch: 14 },
+                            { wch: 15 },
+                            { wch: 10 }
+                          ];
+                          wsSummary['!cols'] = summaryColWidths;
+
                           XLSX.utils.book_append_sheet(wb, wsSummary, "종합 순위 집계");
 
                           // 2. 심사위원별 개별 시트 작성
@@ -3705,6 +3854,42 @@ function App() {
 
                             const wsJudge = XLSX.utils.aoa_to_sheet(sheetRows);
                             wsJudge['!merges'] = merges;
+
+                            // 헤더 행 스타일 (행 0, 1)
+                            for (let r = 0; r < 2; r++) {
+                              for (let c = 0; c < colIdx; c++) {
+                                const cellRef = XLSX.utils.encode_cell({ r, c });
+                                if (wsJudge[cellRef]) {
+                                  wsJudge[cellRef].s = {
+                                    fill: { fgColor: { rgb: r === 0 ? "1B2A4A" : "243A63" } },
+                                    font: { color: { rgb: "FFFFFF" }, bold: true, name: "맑은 고딕", sz: 10 },
+                                    alignment: { horizontal: "center", vertical: "center", wrapText: true },
+                                    border: {
+                                      top: { style: "thin", color: { rgb: "314A7C" } },
+                                      bottom: { style: "thin", color: { rgb: "314A7C" } },
+                                      left: { style: "thin", color: { rgb: "314A7C" } },
+                                      right: { style: "thin", color: { rgb: "314A7C" } }
+                                    }
+                                  };
+                                }
+                              }
+                            }
+
+                            // 데이터 행 스타일
+                            sheet.rows.forEach((_, rIdx) => {
+                              const rowNum = rIdx + 2;
+                              for (let c = 0; c < colIdx; c++) {
+                                const cellRef = XLSX.utils.encode_cell({ r: rowNum, c });
+                                if (wsJudge[cellRef]) {
+                                  wsJudge[cellRef].s = {
+                                    font: { name: "맑은 고딕", sz: 10, color: { rgb: "3A475C" } },
+                                    alignment: { horizontal: c === 1 ? "left" : "center", vertical: "center" },
+                                    border: thinBorder
+                                  };
+                                }
+                              }
+                            });
+
                             const safeSheetName = (sheet.judgeName || '심사위원').substring(0, 25) + " 평가";
                             XLSX.utils.book_append_sheet(wb, wsJudge, safeSheetName);
                           });
