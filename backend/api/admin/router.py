@@ -542,6 +542,12 @@ def save_group_details(fg_id: int, req: SaveDetailsRequest, x_admin_username: Op
                     {"fg_id": fg_id}
                 ).scalar() or 0
 
+                if score_count > 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"이미 심사위원의 평가 점수({score_count}건)가 등록되어 있어 기본 설정을 변경할 수 없습니다. 평가 데이터 보호를 위해 저장이 차단되었습니다."
+                    )
+
                 # 1. 대회 정보 업데이트
                 conn.execute(
                     text("UPDATE fair_group SET fg_name = :name, fg_period = :period, fg_status = :status, fg_code = :code WHERE fg_id = :fg_id"),

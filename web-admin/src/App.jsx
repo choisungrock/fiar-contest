@@ -1101,21 +1101,12 @@ function App() {
         showToast('모든 설정 변경 사항이 데이터베이스에 자동 반영 및 저장되었습니다.');
         fetchGroups();
       } else {
-        alert("데이터베이스 저장에 실패하였습니다.");
+        const errData = await response.json().catch(() => ({}));
+        alert(errData.detail || "데이터베이스 저장에 실패하였습니다.");
       }
     } catch (e) {
       console.error("데이터베이스 저장 중 에러:", e);
-      setDbBackup({
-        systemName,
-        systemCode,
-        startDate,
-        endDate,
-        judges,
-        bumans,
-        products,
-        templates
-      });
-      showToast('모든 설정 변경 사항이 로컬 스토리지에 동기화 저장되었습니다.');
+      showToast('네트워크 오류로 데이터베이스 저장에 실패하였습니다.');
     }
   };
 
@@ -1979,12 +1970,14 @@ function App() {
               {NAV.find(n => n.key === section)?.label}
             </div>
           </div>
-          <button
-            onClick={handleSaveAll}
-            className="bg-[#e03b3b] border-none text-white rounded-[10px] h-[46px] px-[22px] text-[15px] font-extrabold cursor-pointer hover:bg-[#c0392b] transition-all"
-          >
-            변경사항 저장
-          </button>
+          {section !== 'results' && (
+            <button
+              onClick={handleSaveAll}
+              className="bg-[#e03b3b] border-none text-white rounded-[10px] h-[46px] px-[22px] text-[15px] font-extrabold cursor-pointer hover:bg-[#c0392b] transition-all"
+            >
+              변경사항 저장
+            </button>
+          )}
         </div>
 
         {/* 핵심 컨텐츠 패널 스위칭 */}
@@ -3909,12 +3902,12 @@ function App() {
                       엑셀 내려받기
                     </button>
 
-                    <button
+                    {/* <button
                       onClick={handlePublish}
                       className="h-[48px] px-6 border-none bg-primary text-white rounded-[10px] text-[14px] font-extrabold cursor-pointer hover:bg-secondary transition-all shadow-sm"
                     >
                       결과 확정·공표
-                    </button>
+                    </button> */}
                   </div>
 
                   <div className="text-[12px] text-[#8b97ab] leading-relaxed max-w-[1100px]">
