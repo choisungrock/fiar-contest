@@ -233,6 +233,7 @@ function App() {
   });
   const [toast, setToast] = useState('');
   const [resultsSubTab, setResultsSubTab] = useState('summary'); // summary | judges
+  const [summaryScoreMode, setSummaryScoreMode] = useState('converted'); // converted | raw
   const [selectedResultJudgeIdx, setSelectedResultJudgeIdx] = useState(0);
   const [draggedIdx, setDraggedIdx] = useState(null);
   const [showAddTemplateForm, setShowAddTemplateForm] = useState(false);
@@ -3196,6 +3197,7 @@ function App() {
                     isMax: idx === maxIdx && canTrimReal
                   })),
                   rawTotal: trueRawTotal,
+                  convertedTotal: Math.round(convertedSum * 10) / 10,
                   finalTotal: Math.round(finalTotal * 10) / 10,
                   finalAvg
                 };
@@ -3320,12 +3322,44 @@ function App() {
                   {/* 1) 종합 순위 집계 탭 화면 */}
                   {resultsSubTab === 'summary' && (
                     <>
-                      <div>
-                        <div className="text-[15px] font-extrabold text-[#1b2a4a]">
-                          부문 집계 결과 매트릭스 ({activeResultBumanObject?.name})
+                      <div className="flex justify-between items-center max-w-[1100px] flex-wrap gap-2">
+                        <div>
+                          <div className="text-[15px] font-extrabold text-[#1b2a4a]">
+                            부문 집계 결과 매트릭스 ({activeResultBumanObject?.name})
+                          </div>
+                          <div className="text-[13px] text-[#8b97ab] mt-1">
+                            {summaryScoreMode === 'converted' ? (
+                              <>심사위원별 점수 · 최고( <span className="text-[#2f5488] font-bold">파랑</span> ) 및 최저( <span className="text-[#c0392b] font-bold">주황</span> ) 점수는 집계 신뢰도 확보를 위해 최종 합계 계산에서 제외됩니다.</>
+                            ) : (
+                              <>심사위원별 세부 항목 채점의 <span className="text-[#2f5a3a] font-bold">순수 원점수</span> 표시 모드입니다. (우측 '원점수합'과 대조 가능)</>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-[13px] text-[#8b97ab] mt-1">
-                          심사위원별 점수 · 최고( <span className="text-[#2f5488] font-bold">파랑</span> ) 및 최저( <span className="text-[#c0392b] font-bold">주황</span> ) 점수는 집계 신뢰도 확보를 위해 최종 합계 계산에서 제외됩니다.
+
+                        {/* 환산점수 / 원점수 토글 버튼 */}
+                        <div className="flex items-center bg-[#f0f4fa] p-1 rounded-xl border border-[#dde3ec] shadow-xs">
+                          <button
+                            type="button"
+                            onClick={() => setSummaryScoreMode('converted')}
+                            className={`py-1.5 px-3 rounded-lg text-[13px] font-extrabold transition-all cursor-pointer ${
+                              summaryScoreMode === 'converted'
+                                ? 'bg-primary text-white shadow-xs'
+                                : 'text-[#5a6a82] hover:text-[#1b2a4a]'
+                            }`}
+                          >
+                            환산점수 보기
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSummaryScoreMode('raw')}
+                            className={`py-1.5 px-3 rounded-lg text-[13px] font-extrabold transition-all cursor-pointer ${
+                              summaryScoreMode === 'raw'
+                                ? 'bg-[#2f5a3a] text-white shadow-xs'
+                                : 'text-[#5a6a82] hover:text-[#1b2a4a]'
+                            }`}
+                          >
+                            원점수 보기
+                          </button>
                         </div>
                       </div>
 
@@ -3342,12 +3376,18 @@ function App() {
                               {bumanJudges.map((j) => (
                                 <th key={j.id} className="bg-[#243a63] text-white p-3 font-semibold text-center min-w-[100px] whitespace-nowrap">
                                   {j.name}<br /><span className="text-[10px] text-textBlue font-normal">{j.affiliation}</span>
+                                  {summaryScoreMode === 'raw' && (
+                                    <span className="block text-[10px] text-[#a0e8bb] font-bold mt-0.5">(원점수)</span>
+                                  )}
                                 </th>
                               ))}
-                              <th className="bg-[#2f5a3a] text-white p-3 font-extrabold text-center min-w-[78px]">
+                              <th className="bg-[#2f5a3a] text-white p-3 font-extrabold text-center min-w-[80px]">
                                 원점수합
                               </th>
-                              <th className="bg-[#8a6a1e] text-white p-3 font-extrabold text-center min-w-[90px]">
+                              <th className="bg-[#3e5879] text-white p-3 font-extrabold text-center min-w-[95px]">
+                                환산점수합<br />(최고/최저 포함)
+                              </th>
+                              <th className="bg-[#8a6a1e] text-white p-3 font-extrabold text-center min-w-[95px]">
                                 환산점수합<br />(최고/최저 제외)
                               </th>
                               <th className="bg-[#a67c1e] text-white p-3 font-extrabold text-center min-w-[95px]">
@@ -3376,12 +3416,12 @@ function App() {
 
                                   {/* 심사위원 개별 점수 */}
                                   {bumanJudges.map((j, jIdx) => {
-                                    // 이 심사위원의 해당 제품의 최종 환산 점수를 구함
+                                    // 이 심사위원의 해당 제품의 점수를 구함 (모드에 따라 환산점수 또는 원점수)
                                     const detailed = getJudgeDetailedScores(idx, jIdx, products[rbk][idx]);
-                                    const scoreVal = detailed.totalConverted;
+                                    const scoreVal = summaryScoreMode === 'raw' ? detailed.totalRaw : detailed.totalConverted;
                                     const scoreObj = m.scores[jIdx] || {};
-                                    const isMin = scoreObj.isMin;
-                                    const isMax = scoreObj.isMax;
+                                    const isMin = summaryScoreMode === 'converted' && scoreObj.isMin;
+                                    const isMax = summaryScoreMode === 'converted' && scoreObj.isMax;
 
                                     return (
                                       <td
@@ -3390,7 +3430,9 @@ function App() {
                                           ? 'text-[#2f5488] bg-blue-50/70 font-bold'
                                           : isMin
                                             ? 'text-[#c0392b] bg-red-50/70 font-bold'
-                                            : 'text-[#3a475c]'
+                                            : summaryScoreMode === 'raw'
+                                              ? 'text-[#1e4a2c] bg-[#f7fbf8]'
+                                              : 'text-[#3a475c]'
                                           }`}
                                       >
                                         {formatScore(scoreVal)}
@@ -3404,11 +3446,15 @@ function App() {
                                   <td className="p-3 text-center font-bold text-[#2f5a3a] bg-[#f1f7f1] border-l border-[#f2f4f8]">
                                     {formatScore(m.rawTotal)}
                                   </td>
-                                  {/* 환산점수합 */}
+                                  {/* 환산점수합(최고/최저 포함) */}
+                                  <td className="p-3 text-center font-bold text-[#2d4263] bg-[#f2f6fa] border-l border-[#f2f4f8]">
+                                    {formatScore(m.convertedTotal)}
+                                  </td>
+                                  {/* 환산점수합(최고/최저 제외) */}
                                   <td className="p-3 text-center font-extrabold text-[15px] text-[#8a6a1e] bg-[#fbf4e2] border-l border-[#f2f4f8]">
                                     {formatScore(m.finalTotal)}
                                   </td>
-                                  {/* 환산점수평균 */}
+                                  {/* 환산점수평균(최고/최저 제외) */}
                                   <td className="p-3 text-center font-extrabold text-[16px] text-[#8a6a1e] bg-[#f8ebd0] border-l border-[#f2f4f8]">
                                     {formatScore(m.finalAvg)}
                                   </td>
@@ -3593,7 +3639,16 @@ function App() {
                           const wb = XLSX.utils.book_new();
 
                           // 1. 종합 순위 집계 시트 작성 (지정 심사위원 전용 bumanJudges 반영)
-                          const summaryHeaders = ["제품분류코드", "제품명", ...bumanJudges.map(j => `${j.name}(${j.affiliation})`), "원점수합", "환산점수합", "환산점수평균", "순위"];
+                          const summaryHeaders = [
+                            "제품분류코드",
+                            "제품명",
+                            ...bumanJudges.map(j => j.affiliation ? `${j.name}\n${j.affiliation}` : j.name),
+                            "원점수합",
+                            "환산점수합\n(최고/최저 포함)",
+                            "환산점수합\n(최고/최저 제외)",
+                            "환산점수평균\n(최고/최저 제외)",
+                            "순위"
+                          ];
                           const summaryRows = matrixList.map((m, mIdx) => {
                             const scoresList = bumanJudges.map((_, jIdx) => {
                               return getJudgeDetailedScores(mIdx, jIdx, products[rbk][mIdx]).totalConverted;
@@ -3603,6 +3658,7 @@ function App() {
                               m.name,
                               ...scoresList,
                               m.rawTotal,
+                              m.convertedTotal,
                               m.finalTotal,
                               m.finalAvg,
                               rankMap[m.code]
@@ -3621,7 +3677,7 @@ function App() {
 
                           const headerStyle = {
                             fill: { fgColor: { rgb: "1B2A4A" } },
-                            font: { color: { rgb: "FFFFFF" }, bold: true, name: "맑은 고딕", sz: 11 },
+                            font: { color: { rgb: "FFFFFF" }, bold: true, name: "맑은 고딕", sz: 10 },
                             alignment: { horizontal: "center", vertical: "center", wrapText: true },
                             border: {
                               top: { style: "thin", color: { rgb: "243A63" } },
@@ -3656,6 +3712,13 @@ function App() {
                           const rawTotalStyle = {
                             fill: { fgColor: { rgb: "F1F7F1" } },
                             font: { color: { rgb: "2F5A3A" }, bold: true, name: "맑은 고딕", sz: 10 },
+                            alignment: { horizontal: "center", vertical: "center" },
+                            border: thinBorder
+                          };
+
+                          const convertedTotalStyle = {
+                            fill: { fgColor: { rgb: "F2F6FA" } },
+                            font: { color: { rgb: "2D4263" }, bold: true, name: "맑은 고딕", sz: 10 },
                             alignment: { horizontal: "center", vertical: "center" },
                             border: thinBorder
                           };
@@ -3734,30 +3797,36 @@ function App() {
                             const rawRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol });
                             if (wsSummary[rawRef]) wsSummary[rawRef].s = rawTotalStyle;
 
-                            // 환산점수합
-                            const finalTotRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol + 1 });
+                            // 환산점수합(최고/최저 포함)
+                            const convTotRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol + 1 });
+                            if (wsSummary[convTotRef]) wsSummary[convTotRef].s = convertedTotalStyle;
+
+                            // 환산점수합(최고/최저 제외)
+                            const finalTotRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol + 2 });
                             if (wsSummary[finalTotRef]) wsSummary[finalTotRef].s = finalTotalStyle;
 
-                            // 환산점수평균
-                            const finalAvgRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol + 2 });
+                            // 환산점수평균(최고/최저 제외)
+                            const finalAvgRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol + 3 });
                             if (wsSummary[finalAvgRef]) wsSummary[finalAvgRef].s = finalAvgStyle;
 
                             // 순위
-                            const rankRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol + 3 });
+                            const rankRef = XLSX.utils.encode_cell({ r: rowNum, c: baseCol + 4 });
                             if (wsSummary[rankRef]) wsSummary[rankRef].s = rankStyle;
                           });
 
-                          // 열 너비 설정
+                          // 열 너비 및 헤더 행 높이 설정
                           const summaryColWidths = [
                             { wch: 14 },
                             { wch: 25 },
                             ...bumanJudges.map(() => ({ wch: 18 })),
                             { wch: 13 },
-                            { wch: 14 },
-                            { wch: 15 },
+                            { wch: 20 },
+                            { wch: 20 },
+                            { wch: 22 },
                             { wch: 10 }
                           ];
                           wsSummary['!cols'] = summaryColWidths;
+                          wsSummary['!rows'] = [{ hpt: 32 }];
 
                           XLSX.utils.book_append_sheet(wb, wsSummary, "종합 순위 집계");
 
